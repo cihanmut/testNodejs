@@ -1,0 +1,25 @@
+# Resource lifecycle for apichallenges.com Simple API (shared "multi-user mode", max 100 items in total).
+# The server assigns ids; isbn13 must be unique, so every create gets fresh digits.
+item:
+  create:
+    operation: post_simpleapi_items
+    id_from: response
+    id_path: id
+  body:
+    type: cd
+    isbn13: "{unique_digits:13}"
+    price: 9.99
+    numberinstock: 1
+  delete:
+    operation: delete_simpleapi_items_id
+    params: { id: "{id}" }
+  verify_deleted:
+    operation: get_simpleapi_items_id
+    params: { id: "{id}" }
+    expect: 404
+  # the path param is just {id} (not itemId), so bindings are declared explicitly
+  bind:
+    - { param: id }                                          # every operation with path param id
+    - { operation: put_simpleapi_items_id, body: id }        # body id must be OUR item (example is 90)
+    - { operation: post_simpleapi_items_id, body: id }
+    - { operation: patch_simpleapi_items_id, body: id }

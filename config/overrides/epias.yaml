@@ -1,0 +1,5 @@
+# Baseline overrides for EPİAŞ-style services (dry-run only for EPİAŞ itself).
+# "*" applies to every operation, but only to fields the operation actually has.
+"*":
+  body:
+    page: { number: 1, size: 10, sort: { field: startDate, direction: ASC } }

@@ -1,0 +1,24 @@
+# EPİAŞ-style services: rules from description text (dry-run only against the EPİAŞ fixture).
+rules:
+  - id: EPIAS-PAGE-SIZE-NOT-ALLOWED
+    title: "size outside the documented list 10, 20, 24, 50, 100"
+    match: { field: "(^|\\.)page\\.size$" }
+    value: 23
+    expect: reject
+  - id: EPIAS-ID-LIST-OVER-1000
+    title: "'must not exceed 1000' (uevcbIds, powerPlantIds, organizationIds)"
+    kind: list_size
+    count: 1001
+    match: { name: "^(uevcbIds|powerPlantIds|organizationIds)$" }
+    expect: reject
+  - id: EPIAS-ID-LIST-DUPLICATES
+    title: "'avoid duplicate ids'"
+    kind: list_duplicate
+    match: { name: "^(uevcbIds|powerPlantIds|organizationIds)$" }
+    expect: reject
+  # override the default max range once the real limit of each service is known:
+  - id: RANGE-TOO-LONG
+    kind: date_range
+    case: too_long
+    max_days: 31
+    expect: reject

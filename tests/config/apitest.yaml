@@ -1,0 +1,46 @@
+# TEST-ONLY configuration: offline Petstore targets used by the unit tests (tests/helpers.js -> petCfg()).
+# Petstore is not a real target of this tool any more (the public demo is unreliable); these targets only
+# pair the saved spec fixtures with the in-memory FakePetstore transport (tests/fakes.js). Nothing here
+# sends a network request. Relative paths resolve against tests/ (the parent of this config directory).
+
+defaults:
+  rules_file: ../config/rules/domain_rules.yaml   # the real default domain rules
+
+profiles:
+  public-demo:
+    rate_limit_rps: 1
+    concurrency: 1
+    own_resources_only: true
+    allow_injection: false
+
+targets:
+  petstore_v3_offline:
+    spec: fixtures/petstore_v3_openapi.json
+    base_url: https://petstore3.swagger.io/api/v3
+    profile: public-demo
+    auth:
+      header: api_key
+      env: PETSTORE_API_KEY
+      scheme_map: { api_key: api_key }
+      ignored_schemes: [petstore_auth]
+    expectations:
+      reject: [400, 404, 405, 415, 422]
+    resources: config/resources/petstore_v3.yaml
+    overrides: config/overrides/petstore_v3.yaml
+    known_issues: config/known_issues/petstore_v3.yaml
+    rules: [config/rules/petstore.yaml]
+
+  petstore_v2_offline:        # Swagger 2.0 (form/multipart encodings)
+    spec: fixtures/petstore_v2_swagger.json
+    profile: public-demo
+    auth:
+      header: api_key
+      env: PETSTORE_API_KEY
+      scheme_map: { api_key: api_key }
+      ignored_schemes: [petstore_auth]
+    expectations:
+      reject: [400, 404, 405, 415, 422]
+    resources: config/resources/petstore_v2.yaml
+    overrides: config/overrides/petstore_v2.yaml
+    known_issues: config/known_issues/petstore_v2.yaml
+    rules: [config/rules/petstore.yaml]

@@ -1,0 +1,14 @@
+# Baseline overrides per operationId (priority 1). "*" applies to every operation (only fields it has).
+# Templates: {runId} {n} {unique_int} {unique_int:1..999} {date:-7d} {day:-1d} {now} {<resource>.<field>}
+findPetsByStatus:
+  query: { status: available }
+findPetsByTags:
+  query: { tags: ["apitest-{runId}"] }
+updatePetWithForm:
+  query: { name: "apitest-{runId}-renamed", status: pending }
+createUsersWithListInput:          # never the spec example "theUser": that user belongs to everyone
+  body:
+    - { id: "{unique_int}", username: "apitest_{runId}_{n}_a", firstName: Api, lastName: Test, email: "apitest+{runId}@example.invalid", password: apitest-pw, phone: "0000000000", userStatus: 1 }
+    - { id: "{unique_int}", username: "apitest_{runId}_{n}_b", firstName: Api, lastName: Test, email: "apitest+{runId}@example.invalid", password: apitest-pw, phone: "0000000000", userStatus: 1 }
+loginUser:
+  query: { password: apitest-pw }

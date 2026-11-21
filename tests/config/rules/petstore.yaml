@@ -1,0 +1,9 @@
+# Petstore rules written only in description text.
+# NOTE: "deleteOrder: IDs above 1000 will generate API errors" is NOT turned into a test: it would
+# need a DELETE on an order id this run does not own (forbidden on shared servers).
+rules:
+  - id: PETSTORE-ORDER-ID-6-TO-10
+    title: "orderId 6..10: 'other values will generate exceptions' (v3 docs) — must be a 4xx, not a 5xx"
+    match: { operation: getOrderById, location: path, name: "^orderId$" }
+    value: "7"
+    expect: reject

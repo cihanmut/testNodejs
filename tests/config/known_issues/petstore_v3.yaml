@@ -1,0 +1,4 @@
+# Accepted findings are reported as KNOWN so new defects stand out.
+# match keys (all optional, glob patterns): operation, technique, field, rule, status (int or list)
+# Start empty: the first real run shows what Petstore's weak validation produces; then curate here.
+[]

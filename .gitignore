@@ -1,0 +1,5 @@
+node_modules/
+runs/
+.DS_Store
+# credentials are supplied by the user and never committed
+config/credentials.local.yaml

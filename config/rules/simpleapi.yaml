@@ -1,0 +1,79 @@
+# apitest Simple API: rules that the spec only states in description text
+# ("Value must be an Enum (cd, dvd, book, blu-ray)", "Float of min 0 and max 50000",
+#  "Integer of min 0 and max 100", "must match the regex [0-9]{3}[-]?...", "Maximum length 17",
+#  "Value is mandatory"). The spec declares none of them as enum/minimum/maximum/pattern/required.
+rules:
+  # type: enum cd | dvd | book | blu-ray (mandatory)
+  - id: SIMPLE-TYPE-OUTSIDE-ENUM
+    match: { location: body, name: "^type$" }
+    value: vinyl
+    expect: reject
+  - id: SIMPLE-TYPE-WRONG-CASE
+    match: { location: body, name: "^type$" }
+    value: CD
+    expect: reject
+  - id: SIMPLE-TYPE-VALID
+    title: every documented type value must be accepted
+    match: { location: body, name: "^type$" }
+    values: [dvd, book, blu-ray]
+    expect: accept
+  - id: SIMPLE-TYPE-MISSING
+    kind: omit
+    match: { location: body, name: "^type$", operation: [post_simpleapi_items, put_simpleapi_items_id] }
+    expect: reject
+
+  # price: float 0 .. 50000 (mandatory)
+  - id: SIMPLE-PRICE-BELOW-MIN
+    match: { location: body, name: "^price$" }
+    value: -0.01
+    expect: reject
+  - id: SIMPLE-PRICE-MIN
+    match: { location: body, name: "^price$" }
+    value: 0
+    expect: accept
+  - id: SIMPLE-PRICE-MAX
+    match: { location: body, name: "^price$" }
+    value: 50000
+    expect: accept
+  - id: SIMPLE-PRICE-ABOVE-MAX
+    match: { location: body, name: "^price$" }
+    value: 50000.01
+    expect: reject
+  - id: SIMPLE-PRICE-MISSING
+    kind: omit
+    match: { location: body, name: "^price$", operation: [post_simpleapi_items, put_simpleapi_items_id] }
+    expect: reject
+
+  # numberinstock: integer 0 .. 100
+  - id: SIMPLE-STOCK-BELOW-MIN
+    match: { location: body, name: "^numberinstock$" }
+    value: -1
+    expect: reject
+  - id: SIMPLE-STOCK-MIN
+    match: { location: body, name: "^numberinstock$" }
+    value: 0
+    expect: accept
+  - id: SIMPLE-STOCK-MAX
+    match: { location: body, name: "^numberinstock$" }
+    value: 100
+    expect: accept
+  - id: SIMPLE-STOCK-ABOVE-MAX
+    match: { location: body, name: "^numberinstock$" }
+    value: 101
+    expect: reject
+
+  # isbn13: regex [0-9]{3}[-]?[0-9]{1}[-]?[0-9]{2}[-]?[0-9]{6}[-]?[0-9]{1}, max length 17 (mandatory)
+  # (no accept-cases with a fixed ISBN: isbn13 must be unique on the shared server)
+  - id: SIMPLE-ISBN-NOT-MATCHING-REGEX
+    match: { location: body, name: "^isbn13$" }
+    value: "abc-d-ef-ghijkl-m"
+    expect: reject
+  - id: SIMPLE-ISBN-TOO-LONG
+    title: longer than the documented maximum of 17 characters
+    match: { location: body, name: "^isbn13$" }
+    value: "123-4-56-789012-3-45"
+    expect: reject
+  - id: SIMPLE-ISBN-MISSING
+    kind: omit
+    match: { location: body, name: "^isbn13$", operation: [post_simpleapi_items, put_simpleapi_items_id] }
+    expect: reject

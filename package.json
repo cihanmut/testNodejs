@@ -1,0 +1,15 @@
+{
+  "name": "apitest",
+  "version": "0.3.0",
+  "description": "Swagger/OpenAPI-driven REST API test tool: baseline + single-mutation test generation, safe execution, HTML reports. Node.js port of the Python tool; no runtime dependencies.",
+  "type": "module",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": { "node": ">=18" },
+  "bin": { "apitest": "src/cli.js" },
+  "scripts": {
+    "test": "node tests/run.js"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

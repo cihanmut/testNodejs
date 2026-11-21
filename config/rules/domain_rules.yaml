@@ -1,0 +1,152 @@
+# Default domain rules (technique D): rules the spec does not express. Loaded for every target
+# (unless the target sets use_default_rules: false). A target rules file can REPLACE any rule by
+# re-defining the same id (e.g. to change expect or max_days). Format: see src/generators/rules.js
+#
+# expect: reject (4xx expected) | accept (2xx expected) | no_5xx (only "no server error" is asserted:
+# used where the right answer depends on the service and should be decided per target).
+rules:
+  # ---------------------------------------------------------------- date-time format (yyyy-MM-dd'T'HH:mm:ssXXX)
+  - id: DATE-NO-OFFSET
+    match: { format: date-time }
+    value: "2023-11-14T17:30:00"
+    expect: reject
+  - id: DATE-ONLY
+    match: { format: date-time }
+    value: "2023-11-14"
+    expect: reject
+  - id: DATE-SLASHES
+    match: { format: date-time }
+    value: "2023/11/14 17:30:00"
+    expect: reject
+  - id: DATE-EPOCH-MILLIS
+    match: { format: date-time }
+    value: 1699972200000
+    expect: reject
+  - id: DATE-INVALID-CALENDAR
+    title: 30 February must be rejected
+    match: { format: date-time }
+    value: "2023-02-30T00:00:00+03:00"
+    expect: reject
+  - id: DATE-ZULU
+    title: UTC 'Z' instead of an offset (decide per service)
+    match: { format: date-time }
+    value: "2023-11-14T14:30:00Z"
+    expect: no_5xx
+  - id: DATE-LEAP-DAY
+    title: leap day 2024-02-29 is a valid date
+    match: { format: date-time, in_range: false }   # inside a start/end pair it would also change the range
+    value: "2024-02-29T00:00:00+03:00"
+    expect: accept
+  - id: DATE-OTHER-OFFSET
+    match: { format: date-time }
+    value: "2023-11-14T17:30:00+05:00"
+    expect: no_5xx
+    level: full
+  - id: DATE-FEB29-NON-LEAP
+    match: { format: date-time }
+    value: "2023-02-29T00:00:00+03:00"
+    expect: reject
+    level: full
+  - id: DATE-HOUR-24
+    match: { format: date-time }
+    value: "2023-11-14T24:00:00+03:00"
+    expect: reject
+    level: full
+  - id: DATE-MONTH-13
+    match: { format: date-time }
+    value: "2023-13-01T00:00:00+03:00"
+    expect: reject
+    level: full
+  - id: DATE-SHORT-OFFSET
+    match: { format: date-time }
+    value: "2023-11-14T17:30:00+3:00"
+    expect: reject
+    level: full
+  - id: DATE-SURROUNDING-SPACES
+    match: { format: date-time }
+    value: " 2023-11-14T17:30:00+03:00 "
+    expect: reject
+    level: full
+  - id: DATE-WITH-MILLIS
+    match: { format: date-time }
+    value: "2023-11-14T17:30:00.000+03:00"
+    expect: no_5xx
+    level: full
+
+  # ---------------------------------------------------------------- date ranges (start/end sibling fields)
+  - id: RANGE-START-EQUALS-END
+    kind: date_range
+    case: start_equals_end
+    expect: no_5xx            # some services allow a zero-length range: decide per service
+  - id: RANGE-START-AFTER-END
+    kind: date_range
+    case: start_after_end
+    expect: reject
+  - id: RANGE-TOO-LONG
+    kind: date_range
+    case: too_long
+    max_days: 31              # ASSUMPTION — replace per service with the real limit
+    expect: reject
+  - id: RANGE-FUTURE-END
+    kind: date_range
+    case: future_end
+    expect: no_5xx
+    level: full
+  - id: RANGE-VERY-OLD-START
+    kind: date_range
+    case: very_old_start
+    expect: no_5xx
+    level: full
+
+  # ---------------------------------------------------------------- paging (page object or query params)
+  - id: PAGE-NUMBER-ZERO
+    match: { field: "(^|\\.)page\\.(number|page)$" }
+    value: 0
+    expect: reject
+  - id: PAGE-NUMBER-NEGATIVE
+    match: { field: "(^|\\.)page\\.(number|page)$" }
+    value: -1
+    expect: reject
+  - id: PAGE-SIZE-ZERO
+    match: { field: "(^|\\.)page\\.size$" }
+    value: 0
+    expect: reject
+  - id: PAGE-SIZE-NEGATIVE
+    match: { field: "(^|\\.)page\\.size$" }
+    value: -1
+    expect: reject
+  - id: PAGE-SIZE-HUGE
+    match: { field: "(^|\\.)page\\.size$" }
+    value: 100000
+    expect: reject
+  - id: PAGE-NUMBER-HUGE
+    match: { field: "(^|\\.)page\\.(number|page)$" }
+    value: 2147483647
+    expect: no_5xx
+    level: full
+  - id: QUERY-PAGE-ZERO
+    match: { location: query, name: "^(page|pageNumber|pageNo)$" }
+    value: "0"
+    expect: reject
+  - id: QUERY-PAGE-NEGATIVE
+    match: { location: query, name: "^(page|pageNumber|pageNo)$" }
+    value: "-1"
+    expect: reject
+  - id: QUERY-SIZE-ZERO
+    match: { location: query, name: "^(size|pageSize|limit)$" }
+    value: "0"
+    expect: reject
+  - id: QUERY-SIZE-HUGE
+    match: { location: query, name: "^(size|pageSize|limit)$" }
+    value: "100000"
+    expect: reject
+
+  # ---------------------------------------------------------------- sort
+  - id: SORT-DIRECTION-INVALID
+    match: { field: "(^|\\.)(sort\\.)?direction$" }
+    value: "ASCENDING"
+    expect: reject
+  - id: SORT-FIELD-UNKNOWN
+    match: { field: "(^|\\.)sort\\.field$" }
+    value: "apitestUnknownField"
+    expect: reject

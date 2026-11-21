@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Launcher for macOS/Linux: ./apitest <command> ...   (needs Node.js 18+; no npm install)
+DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$DIR" && exec node "$DIR/src/cli.js" "$@"

@@ -1,0 +1,3 @@
+# Baseline overrides for apichallenges.com Simple API.
+get_simpleapi_items:
+  query: { _sortBy: "+id" }

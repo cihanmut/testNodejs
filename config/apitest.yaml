@@ -1,0 +1,69 @@
+# apitest main configuration. Targets are configuration only: adding a demo API = one new entry.
+# The host denylist is NOT here: see safety.yaml (it cannot be overridden from this file or the CLI).
+
+defaults:
+  seed: 42
+  level: standard
+  timeout_connect: 5
+  timeout_read: 30
+  network_retries: 2          # retries only on network errors, never on an HTTP status
+  retry_backoff_s: 2
+  response_time_warn_ms: 3000
+  proxy: null                 # e.g. http://proxy.corp:8080 (HTTPS_PROXY env var is honoured too)
+  ca_bundle: null             # path to a corporate CA bundle (.pem)
+  include_exports: false
+  health_baseline_window: 10
+  health_baseline_fail_ratio: 0.5
+  health_max_consecutive_errors: 20
+  credential_expiry_consecutive: 3
+
+profiles:
+  public-demo:                # shared public servers; hard limits enforced in code (max 2 rps, own resources only, no injection)
+    rate_limit_rps: 1
+    concurrency: 1
+    own_resources_only: true
+    allow_injection: false
+  company-test:               # placeholder for your company test environment (rate to be agreed)
+    rate_limit_rps: 5
+    concurrency: 1
+    own_resources_only: true
+    allow_injection: false
+
+targets:
+  simpleapi:                  # apichallenges.com Simple API — PRIMARY execution target (shared, no auth)
+    spec: https://apichallenges.com/simpleapi/docs/openapi-3.0.json
+    base_url: https://apichallenges.com
+    profile: public-demo
+    expectations:
+      reject: [400, 404, 405, 409, 415, 422]
+    resources: config/resources/simpleapi.yaml
+    overrides: config/overrides/simpleapi.yaml
+    known_issues: config/known_issues/simpleapi.yaml
+    rules: [config/rules/simpleapi.yaml]
+    envelope: { path: errorMessages, fail_if_present: true }   # Thingifier errors inside a 2xx = FAIL
+
+  simpleapi_offline:          # same API from the saved fixture (dry-run / tests without internet)
+    spec: tests/fixtures/apichallenges_simpleapi_openapi30.json
+    base_url: https://apichallenges.com
+    profile: public-demo
+    expectations:
+      reject: [400, 404, 405, 409, 415, 422]
+    resources: config/resources/simpleapi.yaml
+    overrides: config/overrides/simpleapi.yaml
+    known_issues: config/known_issues/simpleapi.yaml
+    rules: [config/rules/simpleapi.yaml]
+    envelope: { path: errorMessages, fail_if_present: true }
+
+  epias:                      # denylisted host -> analyze and generate --dry-run only
+    spec: tests/fixtures/epias_electricity_swagger.json
+    profile: company-test
+    auth:
+      header: TGT
+      env: TGT_TOKEN
+      unauth_expect: [401, 403, 302]
+      login_redirect_pattern: "/cas/login"
+    exports:
+      tag_pattern: "-export-controller$"
+      type_field: exportType
+    overrides: config/overrides/epias.yaml
+    rules: [config/rules/epias.yaml]

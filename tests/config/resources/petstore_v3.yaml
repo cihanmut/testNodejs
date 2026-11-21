@@ -1,0 +1,76 @@
+# Resource lifecycle for Petstore v3. IDs are unique random int64 values; names carry apitest-<runId>
+# so anyone on the shared server can recognise our data. Teardown deletes everything we created.
+pet:
+  create:
+    operation: addPet
+    id_from: response
+    id_path: id
+  body:
+    id: "{unique_int}"
+    name: "apitest-{runId}-{n}"
+    status: available
+    photoUrls: ["https://example.invalid/apitest.png"]
+    category: { id: 1, name: apitest }
+    tags: [ { id: 1, name: "apitest-{runId}" } ]
+  delete:
+    operation: deletePet
+    params: { petId: "{id}" }
+  verify_deleted:
+    operation: getPetById
+    params: { petId: "{id}" }
+    expect: 404
+  # bindings inferred from the spec: path param petId (getPetById, updatePetWithForm, deletePet,
+  # uploadFile) and updatePet body.id (same Pet schema as addPet)
+
+order:
+  # v3 docs: order ids must be < 1000 (delete) and <= 5 or > 10 (get) -> small range shared with
+  # everybody: probe that the id is free (GET -> 404) before creating with it.
+  create:
+    operation: placeOrder
+    id_from: response
+    id_path: id
+    probe: { operation: getOrderById, params: { orderId: "{id}" }, expect: 404, attempts: 5 }
+  requires: [pet]
+  body:
+    id: "{unique_int:11..999}"
+    petId: "{pet.id}"
+    quantity: 1
+    shipDate: "{now}"
+    status: placed
+    complete: false
+  delete:
+    operation: deleteOrder
+    params: { orderId: "{id}" }
+  verify_deleted:
+    operation: getOrderById
+    params: { orderId: "{id}" }
+    expect: 404
+  # binding of path param orderId is inferred (orderId -> order)
+
+user:
+  # the id is the username (a string): no mutations are ever sent to it on write requests
+  create:
+    operation: createUser
+    id_from: request
+    id_path: username
+  body:
+    id: "{unique_int}"
+    username: "apitest_{runId}_{n}"
+    firstName: Api
+    lastName: Test
+    email: "apitest+{runId}@example.invalid"
+    password: "apitest-pw"
+    phone: "0000000000"
+    userStatus: 1
+  delete:
+    operation: deleteUser
+    params: { username: "{id}" }
+  verify_deleted:
+    operation: getUserByName
+    params: { username: "{id}" }
+    expect: 404
+  bind:
+    - { param: username }                       # getUserByName, updateUser, deleteUser, loginUser
+    - { operation: updateUser, body: username }
+  also_created_by:
+    - { operation: createUsersWithListInput, id_path: "*.username" }
