@@ -1,4 +1,4 @@
-# EPİAŞ-style services: rules from description text (dry-run only against the EPİAŞ fixture).
+# EPİAŞ services: rules from description text (target epiasQA; also the offline test target in tests/config).
 rules:
   - id: EPIAS-PAGE-SIZE-NOT-ALLOWED
     title: "size outside the documented list 10, 20, 24, 50, 100"

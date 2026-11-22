@@ -1,5 +1,10 @@
 # Swagger-driven REST API Test Tool
 
+> **Change 2026-11-22 (user decision), overrides the denylist parts below:** the host denylist
+> (`config/safety.yaml`, built-in EPİAŞ default, exit code 4) and the `epias` target were removed.
+> The EPİAŞ reporting-service is now the real target `epiasQA`. Targets can set a default operation
+> filter in a `filters:` block (tags/paths/methods/operations); CLI filter flags replace it.
+
 
 # Role
 You are a senior software test architect and an experienced Python engineer. We are in PLAN MODE: do NOT write or modify any code yet. First analyze the specs, then ask clarifying questions, then produce a detailed implementation plan for my approval.

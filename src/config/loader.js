@@ -1,12 +1,11 @@
-// Loads config/apitest.yaml (+ safety.yaml, credentials.local.yaml) into typed objects.
+// Loads config/apitest.yaml (+ credentials.local.yaml) into typed objects.
 import fs from 'node:fs';
 import path from 'node:path';
 import { yamlLoad } from '../util/yaml.js';
 import {
   AppConfig, AuthConfig, ConfigError, Expectations, LEVELS, buildSection, defaultsDefaults, envelopeDefaults,
-  exportsDefaults, profileDefaults, targetDefaults,
+  exportsDefaults, filtersDefaults, profileDefaults, targetDefaults,
 } from './models.js';
-import { loadDenylist } from './safety.js';
 
 export const DEFAULT_CONFIG_PATH = path.join('config', 'apitest.yaml');
 export const CREDENTIALS_FILE_NAME = 'credentials.local.yaml';
@@ -37,12 +36,6 @@ export function loadConfig(configPath = null) {
   const projectRoot = path.dirname(configDir);
   const data = readYaml(file);
 
-  if ('denylist' in data) {
-    throw new ConfigError(
-      `${file}: 'denylist' is not allowed here. The denylist lives only in ` +
-        `${path.join(configDir, 'safety.yaml')} (plus the built-in default) and cannot be overridden.`,
-    );
-  }
   const unknown = Object.keys(data).filter((k) => !['defaults', 'profiles', 'targets'].includes(k)).sort();
   if (unknown.length) throw new ConfigError(`${file}: unknown top-level key(s): ${unknown.join(', ')}`);
 
@@ -71,10 +64,17 @@ export function loadConfig(configPath = null) {
     const expectations = new Expectations(checked(tdata.expectations, `${where}.expectations`, ['reject', 'per_tag', 'per_operation']));
     const exports = buildSection(exportsDefaults(), tdata.exports, `${where}.exports`);
     const envelope = buildSection(envelopeDefaults(), tdata.envelope, `${where}.envelope`);
+    const filters = buildSection(filtersDefaults(), tdata.filters, `${where}.filters`);
+    for (const [k, v] of Object.entries(filters)) {
+      if (typeof v === 'string') filters[k] = [v];
+      else if (!Array.isArray(v)) throw new ConfigError(`${where}.filters.${k} must be a list`);
+      filters[k] = filters[k].map(String);
+    }
     delete tdata.auth;
     delete tdata.expectations;
     delete tdata.exports;
     delete tdata.envelope;
+    delete tdata.filters;
     for (const key of ['overrides', 'known_issues', 'resources']) tdata[key] = resolvePath(projectRoot, tdata[key]);
     const rules = tdata.rules || [];
     delete tdata.rules;
@@ -83,7 +83,7 @@ export function loadConfig(configPath = null) {
     let spec = String(tdata.spec);
     delete tdata.spec;
     if (!spec.includes('://')) spec = resolvePath(projectRoot, spec);
-    const tgt = buildSection(targetDefaults(), { name, spec, ...tdata, rules: rulePaths, auth, expectations, exports, envelope }, where);
+    const tgt = buildSection(targetDefaults(), { name, spec, ...tdata, rules: rulePaths, auth, expectations, exports, envelope, filters }, where);
     if (!(tgt.profile in profiles)) throw new ConfigError(`${where}: unknown profile '${tgt.profile}'`);
     if (!['reject', 'accept', 'ignore'].includes(tgt.unknown_fields)) throw new ConfigError(`${where}: unknown_fields must be reject, accept or ignore`);
     for (const p of tgt.rules) {
@@ -99,7 +99,6 @@ export function loadConfig(configPath = null) {
     defaults,
     profiles,
     targets,
-    denylist: loadDenylist(configDir),
     credentials_file: fs.existsSync(creds) ? creds : null,
   });
 }

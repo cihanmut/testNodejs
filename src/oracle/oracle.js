@@ -60,7 +60,6 @@ export class Oracle {
   }
 
   evaluate(c, op, resp, requestBody = null) {
-    if (resp.error_kind === 'denied') return new Verdict(ERROR, `blocked by denylist: ${resp.error}`);
     if (resp.error) return new Verdict(ERROR, `${resp.error_kind || 'network'} error: ${resp.error}`);
     const status = resp.status;
     const exp = c.expectation;

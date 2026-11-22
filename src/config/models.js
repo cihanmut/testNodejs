@@ -56,6 +56,8 @@ export class Expectations {
 export const profileDefaults = () => ({ name: '', rate_limit_rps: 1.0, concurrency: 1, own_resources_only: true, allow_injection: false });
 export const exportsDefaults = () => ({ tag_pattern: null, type_field: null });
 /** Error envelope inside a 2xx response (e.g. {"resultCode": "E1", ...} with HTTP 200). */
+/** Default operation filter of a target, used when no --tag/--path/--method/--operation flag is given. */
+export const filtersDefaults = () => ({ tags: [], paths: [], methods: [], operations: [] });
 export const envelopeDefaults = () => ({ path: null, ok_values: null, fail_if_present: false });
 
 export const targetDefaults = () => ({
@@ -70,6 +72,7 @@ export const targetDefaults = () => ({
   resources: null,
   exports: null,
   envelope: null,
+  filters: null, // default operation filter (see filtersDefaults)
   rules: [], // extra domain-rule files for this target
   use_default_rules: true, // also load defaults.rules_file
   unknown_fields: 'ignore', // unknown body field: reject | accept | ignore (no 5xx)
@@ -96,8 +99,8 @@ export const defaultsDefaults = () => ({
 });
 
 export class AppConfig {
-  constructor({ config_dir, project_root, defaults, profiles, targets, denylist, credentials_file = null }) {
-    Object.assign(this, { config_dir, project_root, defaults, profiles, targets, denylist, credentials_file });
+  constructor({ config_dir, project_root, defaults, profiles, targets, credentials_file = null }) {
+    Object.assign(this, { config_dir, project_root, defaults, profiles, targets, credentials_file });
   }
 
   target(name) {

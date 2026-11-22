@@ -1,28 +1,28 @@
 #!/usr/bin/env node
 // apitest command line.
 //
-//   apitest fetch-spec <url|editor-link> --out FILE    the ONLY way to download a spec from a denylisted host
+//   apitest fetch-spec <url|editor-link> --out FILE    save a spec to a local file
 //   apitest analyze  --target T | --spec SRC           Step-0 style spec analysis
 //   apitest generate --target T --dry-run [filters]    list generated cases, send nothing
 //   apitest run      --target T [--level] [filters]    execute; writes runs/<target>/<runId>/
+//     filters: --tag/--path/--method/--operation (repeatable); without them the target's `filters:` config applies
 //   apitest run      --resume RUNID                    continue a run (e.g. with a new credential)
 //   apitest report   --run RUNID                       re-render the report files
 //   apitest cleanup  --run RUNID                       retry deleting resources a run left behind
 //   apitest diff     OLD NEW                           what changed between two spec versions
 //
-// Exit codes: 0 ok · 1 failures/cleanup problems · 2 aborted/credential expired · 3 usage/config · 4 denylist
+// Exit codes: 0 ok · 1 failures/cleanup problems · 2 aborted/credential expired · 3 usage/config
 import fs from 'node:fs';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { pathToFileURL } from 'node:url';
 import { loadConfig } from './config/loader.js';
 import { ConfigError, LEVELS } from './config/models.js';
-import { DeniedHostError } from './config/safety.js';
 import { Filters } from './generators/plan.js';
 import { ResourceConfigError } from './resources/definitions.js';
 import { RuleError } from './generators/rules.js';
 import {
-  EXIT_DENIED, EXIT_OK, EXIT_USAGE, RunError, changedSince, cleanupRun, executeRun, loadTargetApi, makeHttp, planFor, renderReport, specDiff,
+  EXIT_OK, EXIT_USAGE, RunError, changedSince, cleanupRun, executeRun, loadTargetApi, makeHttp, planFor, renderReport, specDiff,
   writeCasesCsv,
 } from './runner.js';
 import { analyze as analyzeSpec, formatAnalysis } from './spec/analyze.js';
@@ -47,7 +47,7 @@ class UsageError extends CliExit {
 
 // ------------------------------------------------------------------------------------- arg parsing
 const FILTER_OPTS = {
-  tag: { kind: 'multi', help: 'tag (repeatable)' },
+  tag: { kind: 'multi', help: "tag, e.g. 'pet' (repeatable). Any filter flag replaces the target's `filters:` config" },
   path: { kind: 'multi', help: "path glob, e.g. '/pet/*' (repeatable)" },
   method: { kind: 'multi', help: 'HTTP method (repeatable)' },
   operation: { kind: 'multi', help: 'operationId glob (repeatable)' },
@@ -57,7 +57,7 @@ const FILTER_OPTS = {
 
 const COMMANDS = {
   'fetch-spec': {
-    help: 'Download a spec ONCE (allowed even for denylisted hosts). Refuses to overwrite an existing file.',
+    help: 'Download a spec and save it to a file. Refuses to overwrite an existing file.',
     args: ['SOURCE'],
     opts: { out: { kind: 'value', required: true, help: 'file to save the spec to' } },
   },
@@ -120,13 +120,13 @@ const MAIN_HELP = `Usage: apitest [--config FILE] COMMAND [OPTIONS]
   Swagger/OpenAPI-driven REST API test tool.
 
 Options:
-  --config FILE  main config file (safety.yaml is read next to it)  [default: config/apitest.yaml]
+  --config FILE  main config file  [default: config/apitest.yaml]
   -h, --help     Show this message and exit.
 
 Commands:
 ${Object.entries(COMMANDS).map(([n, c]) => `  ${n.padEnd(11)}${c.help.split('. ')[0].replace(/\.$/, '')}`).join('\n')}
 
-Exit codes: 0 ok · 1 failures/cleanup problems · 2 aborted/credential expired · 3 usage/config · 4 denylist`;
+Exit codes: 0 ok · 1 failures/cleanup problems · 2 aborted/credential expired · 3 usage/config`;
 
 function commandHelp(name) {
   const c = COMMANDS[name];
@@ -228,7 +228,10 @@ function targetOf(cfg, name) {
   }
 }
 
-const filtersOf = (o) => new Filters({ tags: o.tag, paths: o.path, methods: o.method, operations: o.operation });
+/** Filters from the CLI flags, or null when no filter flag was given (then the target's `filters:` config applies). */
+const filtersOf = (o) => (['tag', 'path', 'method', 'operation'].some((k) => o[k].length)
+  ? new Filters({ tags: o.tag, paths: o.path, methods: o.method, operations: o.operation })
+  : null);
 
 function injectionAllowed(cfg, tcfg, flag) {
   if (!flag) return false;
@@ -248,7 +251,7 @@ async function changedFilter(cfg, tcfg, since, flt, out) {
   try {
     d = await changedSince(cfg, tcfg, since);
   } catch (exc) {
-    if (exc instanceof RunError || exc instanceof SpecLoadError || exc instanceof DeniedHostError) throw new CliExit(exc.message, EXIT_USAGE);
+    if (exc instanceof RunError || exc instanceof SpecLoadError) throw new CliExit(exc.message, EXIT_USAGE);
     throw exc;
   }
   out(`changed since ${since}: added ${d.added.length}, changed ${Object.keys(d.changed).length}, removed ${d.removed.length}, unchanged ${d.unchanged}`);
@@ -256,7 +259,7 @@ async function changedFilter(cfg, tcfg, since, flt, out) {
     out('no new or changed operations: nothing to test');
     return [flt, true];
   }
-  flt = flt || new Filters();
+  flt = flt || Filters.forTarget(tcfg);
   flt.op_keys = d.keys_to_test;
   return [flt, false];
 }
@@ -265,25 +268,22 @@ async function changedFilter(cfg, tcfg, since, flt, out) {
 async function cmdFetchSpec(cfg, { opts, args }, out) {
   const outPath = opts.out;
   if (fs.existsSync(outPath)) {
-    throw new CliExit(`${outPath} already exists; specs from denylisted hosts are downloaded only once. `
-      + 'Delete the file yourself if you really want a fresh copy.', EXIT_USAGE);
+    throw new CliExit(`${outPath} already exists. Delete the file yourself if you really want a fresh copy.`, EXIT_USAGE);
   }
   const url = resolveEditorLink(args[0]);
-  const denied = cfg.denylist.isDenied(url);
-  const http = makeHttp(cfg, null, { allowOnceUrl: denied ? url : null });
+  const http = makeHttp(cfg);
   let loaded;
   try {
     loaded = await loadSpecSource(url, http);
   } catch (exc) {
-    if (exc instanceof SpecLoadError || exc instanceof DeniedHostError) throw new CliExit(exc.message, EXIT_USAGE);
+    if (exc instanceof SpecLoadError) throw new CliExit(exc.message, EXIT_USAGE);
     throw exc;
   } finally {
     http.close();
   }
   fs.mkdirSync(path.dirname(path.resolve(outPath)), { recursive: true });
   fs.writeFileSync(outPath, loaded.text, 'utf8');
-  const note = denied ? ' (denylisted host: this was the single allowed request)' : '';
-  out(`saved ${outPath} (${loaded.text.length} bytes, sha256 ${loaded.sha256.slice(0, 16)}…)${note}`);
+  out(`saved ${outPath} (${loaded.text.length} bytes, sha256 ${loaded.sha256.slice(0, 16)}…)`);
   return EXIT_OK;
 }
 
@@ -296,7 +296,7 @@ async function cmdAnalyze(cfg, { opts }, out) {
     if (tcfg) [api] = await loadTargetApi(cfg, tcfg, http, opts.spec);
     else api = normalize(await loadSpecSource(opts.spec, http));
   } catch (exc) {
-    if (exc instanceof SpecLoadError || exc instanceof DeniedHostError) throw new CliExit(exc.message, exc instanceof DeniedHostError ? EXIT_DENIED : EXIT_USAGE);
+    if (exc instanceof SpecLoadError) throw new CliExit(exc.message, EXIT_USAGE);
     throw exc;
   } finally {
     http.close();
@@ -322,7 +322,7 @@ async function cmdGenerate(cfg, { opts }, out) {
   try {
     [api] = await loadTargetApi(cfg, tcfg, http);
   } catch (exc) {
-    if (exc instanceof SpecLoadError || exc instanceof DeniedHostError) throw new CliExit(exc.message, EXIT_USAGE);
+    if (exc instanceof SpecLoadError) throw new CliExit(exc.message, EXIT_USAGE);
     throw exc;
   } finally {
     http.close();
@@ -335,6 +335,10 @@ async function cmdGenerate(cfg, { opts }, out) {
     throw exc;
   }
   const elapsed = (performance.now() - t0) / 1000;
+  const active = Object.entries(plan.filters_used || {}).filter(([k, v]) => k !== 'op_keys' && v.length);
+  if (active.length) out(`filters (${flt && !flt.fromTarget ? 'command line' : `target '${tcfg.name}' config`}): ` + active.map(([k, v]) => `${k}=${v.join(',')}`).join(' '));
+  for (const w of plan.filter_warnings) out(`warning: ${w}`);
+  if (!plan.ops.length) out('no operations match the filters');
   const rank = (t) => (t === 'BASE' ? 0 : t === 'AUTH' ? 1 : 9);
   const techniques = [...new Set(plan.cases.map((c) => c.technique))].sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : a > b ? 1 : 0));
   if (opts['per-operation']) {
@@ -357,8 +361,6 @@ async function cmdGenerate(cfg, { opts }, out) {
     const kinds = Counter.of(plan.findings.map((f) => f.kind));
     out('documentation findings while generating: ' + [...kinds].map(([k, v]) => `${k} ${v}`).join(', '));
   }
-  const denied = cfg.denylist.isDenied(tcfg.spec) || api.servers.some((s) => cfg.denylist.isDenied(s));
-  if (denied) out('target host is denylisted: dry-run only, `apitest run` is blocked');
   out(`generated in ${elapsed.toFixed(2)}s — nothing was sent`);
   if (opts.csv) {
     writeCasesCsv(plan, opts.csv);
@@ -368,7 +370,7 @@ async function cmdGenerate(cfg, { opts }, out) {
 }
 
 async function cmdRun(cfg, { opts }, out, err) {
-  let flt = ['tag', 'path', 'method', 'operation'].some((k) => opts[k].length) ? filtersOf(opts) : null;
+  let flt = filtersOf(opts);
   let injection = false;
   if (opts.target && !opts.resume) {
     const tcfg = targetOf(cfg, opts.target);
@@ -400,7 +402,7 @@ async function cmdDiff(cfg, { opts, args }, out) {
   try {
     d = await specDiff(cfg, args[0], args[1]);
   } catch (exc) {
-    if (exc instanceof RunError || exc instanceof SpecLoadError || exc instanceof DeniedHostError) throw new CliExit(exc.message, EXIT_USAGE);
+    if (exc instanceof RunError || exc instanceof SpecLoadError) throw new CliExit(exc.message, EXIT_USAGE);
     throw exc;
   }
   out(d.format());

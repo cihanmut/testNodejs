@@ -269,7 +269,7 @@ export async function exportTransport(req) {
   return { status: 200, headers: { 'content-type': ct, 'content-disposition': `attachment; filename="${name}"` }, body: data };
 }
 
-/** Transport that records URLs and answers 200 {} (for denylist tests). */
+/** Transport that records URLs and answers 200 {}. */
 export function recordingTransport(calls) {
   return async (req) => {
     calls.push(req.url);

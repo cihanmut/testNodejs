@@ -32,7 +32,7 @@ function flatten(tpl) {
   return out;
 }
 
-for (const [target, apiFn, conf] of [['epias', epiasApi, cfg], ['petstore_v3_offline', petv3Api, petCfg]]) {
+for (const [target, apiFn, conf] of [['epias_offline', epiasApi, petCfg], ['petstore_v3_offline', petv3Api, petCfg]]) {
   test(`every case changes exactly one thing (${target})`, async () => {
     const p0 = plan(conf(), await apiFn(), target, { level: 'full' });
     let checked = 0;
@@ -65,20 +65,20 @@ for (const [target, apiFn, conf] of [['epias', epiasApi, cfg], ['petstore_v3_off
 
 test('generation is deterministic', async () => {
   const api = await epiasApi();
-  const a = plan(cfg(), api, 'epias', { runId: 'A' }).cases.map((c) => c.id);
-  const b = plan(cfg(), api, 'epias', { runId: 'B' }).cases.map((c) => c.id);
+  const a = plan(petCfg(), api, 'epias_offline', { runId: 'A' }).cases.map((c) => c.id);
+  const b = plan(petCfg(), api, 'epias_offline', { runId: 'B' }).cases.map((c) => c.id);
   assert.deepEqual(a, b);
   assert.equal(a.length, new Set(a).size);
 });
 
 test('auth header only in the auth group', async () => {
-  for (const [api, target, header, conf] of [[await epiasApi(), 'epias', 'header.TGT', cfg()], [await petv3Api(), 'petstore_v3_offline', 'header.api_key', petCfg()]]) {
+  for (const [api, target, header, conf] of [[await epiasApi(), 'epias_offline', 'header.TGT', petCfg()], [await petv3Api(), 'petstore_v3_offline', 'header.api_key', petCfg()]]) {
     for (const c of plan(conf, api, target, { level: 'full' }).cases) if (c.field === header) assert.equal(c.technique, 'AUTH', c.id);
   }
 });
 
 test('no-credential matrix cases exist', async () => {
-  const p = plan(cfg(), await epiasApi(), 'epias', { level: 'smoke' });
+  const p = plan(petCfg(), await epiasApi(), 'epias_offline', { level: 'smoke' });
   const op = p.ops.find((x) => x.op.operation_id === 'consumer-quantity');
   assert.deepEqual(op.cases.filter((c) => c.technique === 'AUTH').map((c) => c.rule_id), ['AUTH-MISSING', 'AUTH-EMPTY', 'AUTH-MALFORMED', 'AUTH-WRONG-PREFIX']);
   const pub = p.ops.find((x) => x.op.operation_id === 'demand-forecast');
@@ -86,7 +86,7 @@ test('no-credential matrix cases exist', async () => {
 });
 
 test('EPİAŞ baseline dates and paging', async () => {
-  const p = plan(cfg(), await epiasApi(), 'epias');
+  const p = plan(petCfg(), await epiasApi(), 'epias_offline');
   const bodies = p.ops.map((x) => x.baseline.body).filter(isPlainObject);
   const withRange = bodies.filter((b) => 'startDate' in b && 'endDate' in b);
   assert.ok(withRange.length);
@@ -135,7 +135,7 @@ test('ownership guard', async () => {
 test('dry-run EPİAŞ full with exports is fast', async () => {
   const api = await epiasApi();
   const t0 = performance.now();
-  const p = plan(cfg(), api, 'epias', { level: 'full', includeExports: true });
+  const p = plan(petCfg(), api, 'epias_offline', { level: 'full', includeExports: true });
   assert.ok(performance.now() - t0 < 5000);
   assert.equal(p.ops.length, 301);
   assert.ok(p.cases.length > 10000);

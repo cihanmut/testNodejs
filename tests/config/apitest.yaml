@@ -1,4 +1,6 @@
-# TEST-ONLY configuration: offline Petstore targets used by the unit tests (tests/helpers.js -> petCfg()).
+# TEST-ONLY configuration: offline targets used by the unit tests (tests/helpers.js -> petCfg()).
+# epias_offline = the saved EPİAŞ electricity-service swagger fixture with the real EPİAŞ rules/overrides
+# (used only by generation/analysis tests; no test runs it).
 # Petstore is not a real target of this tool any more (the public demo is unreliable); these targets only
 # pair the saved spec fixtures with the in-memory FakePetstore transport (tests/fakes.js). Nothing here
 # sends a network request. Relative paths resolve against tests/ (the parent of this config directory).
@@ -9,6 +11,11 @@ defaults:
 profiles:
   public-demo:
     rate_limit_rps: 1
+    concurrency: 1
+    own_resources_only: true
+    allow_injection: false
+  company-test:
+    rate_limit_rps: 5
     concurrency: 1
     own_resources_only: true
     allow_injection: false
@@ -44,3 +51,17 @@ targets:
     overrides: config/overrides/petstore_v2.yaml
     known_issues: config/known_issues/petstore_v2.yaml
     rules: [config/rules/petstore.yaml]
+
+  epias_offline:              # EPİAŞ fixture: TGT auth, export controllers, description-text rules
+    spec: fixtures/epias_electricity_swagger.json
+    profile: company-test
+    auth:
+      header: TGT
+      env: TGT_TOKEN
+      unauth_expect: [401, 403, 302]
+      login_redirect_pattern: "/cas/login"
+    exports:
+      tag_pattern: "-export-controller$"
+      type_field: exportType
+    overrides: ../config/overrides/epias.yaml
+    rules: [../config/rules/epias.yaml]

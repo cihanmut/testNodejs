@@ -1,4 +1,4 @@
-# Baseline overrides for EPİAŞ-style services (dry-run only for EPİAŞ itself).
+# Baseline overrides for EPİAŞ services (target epiasQA; also the offline test target in tests/config).
 # "*" applies to every operation, but only to fields the operation actually has.
 "*":
   body:

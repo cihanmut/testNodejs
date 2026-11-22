@@ -1,5 +1,4 @@
 # apitest main configuration. Targets are configuration only: adding a demo API = one new entry.
-# The host denylist is NOT here: see safety.yaml (it cannot be overridden from this file or the CLI).
 
 defaults:
   seed: 42
@@ -54,8 +53,10 @@ targets:
     rules: [config/rules/simpleapi.yaml]
     envelope: { path: errorMessages, fail_if_present: true }
 
-  epias:                      # denylisted host -> analyze and generate --dry-run only
-    spec: tests/fixtures/epias_electricity_swagger.json
+  epiasQA:                    # EPİAŞ reporting-service (TGT auth). NOTE: currently points at the LIVE host;
+                              # switch spec + base_url to the QA environment once its link is known.
+    spec: https://seffaflik.epias.com.tr/reporting-service/technical/tr/swagger.json
+    base_url: https://seffaflik.epias.com.tr/reporting-service   # must include the service base path
     profile: company-test
     auth:
       header: TGT
@@ -67,3 +68,15 @@ targets:
       type_field: exportType
     overrides: config/overrides/epias.yaml
     rules: [config/rules/epias.yaml]
+    # Which operations to test. Used whenever the command line has no --tag/--path/--method/--operation
+    # flag (any such flag replaces this whole block for that run). Empty lists = every operation.
+    # Within one list any value may match (OR); different lists must all match (AND).
+    #   tags:       exact Swagger tag names (`apitest analyze --target epiasQA` lists them)
+    #   paths:      globs on the Swagger path, without the base path: '/v1/data/*'
+    #   methods:    GET, POST, ...
+    #   operations: globs on operationId
+    filters:
+      tags: [reportind-data-controller]       # only the services under this tag
+      paths: []                               # e.g. ['/v1/data/eligible-consumer-and-meter-increases'] for one endpoint
+      methods: []
+      operations: []

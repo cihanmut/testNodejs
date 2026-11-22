@@ -1,7 +1,6 @@
 // The ONLY module that sends HTTP requests.
 //
 // Guarantees:
-// - every outgoing request passes the denylist hook (redirects are never followed anyway);
 // - retries happen only on network errors, never on an HTTP status;
 // - non-idempotent requests are retried only when the connection was never established;
 // - redirects are not followed.
@@ -14,7 +13,6 @@ import https from 'node:https';
 import { performance } from 'node:perf_hooks';
 import tls from 'node:tls';
 import zlib from 'node:zlib';
-import { DeniedHostError, hostOf } from '../config/safety.js';
 import { sleep as realSleep } from '../util/py.js';
 
 export const MAX_STORED_BODY = 8192;
@@ -38,7 +36,7 @@ export class ResponseRecord {
     this.body = Buffer.isBuffer(body) ? body : Buffer.from(body);
     this.elapsed_ms = elapsed_ms;
     this.error = error;
-    this.error_kind = error_kind; // timeout | network | denied
+    this.error_kind = error_kind; // timeout | network
     this.attempts = attempts;
   }
 
@@ -226,32 +224,17 @@ export function nodeTransport({ timeoutConnect = 5, timeoutRead = 30, proxy = nu
 }
 
 export class SafeHttpClient {
-  constructor(denylist, {
+  constructor({
     timeout_connect = 5.0, timeout_read = 30.0, retries = 2, backoff_s = 2.0, rate_limiter = null, proxy = null, ca_bundle = null,
-    transport = null, allow_once_url = null, user_agent = USER_AGENT, sleep = realSleep,
+    transport = null, user_agent = USER_AGENT, sleep = realSleep,
   } = {}) {
-    this.denylist = denylist;
     this.retries = Math.max(0, retries);
     this.backoff_s = backoff_s;
     this.rate_limiter = rate_limiter || new RateLimiter(null);
-    this._allowOnceUrl = allow_once_url;
     this._sleep = sleep;
     this.requests_sent = 0;
     this.user_agent = user_agent;
     this._transport = transport || nodeTransport({ timeoutConnect: timeout_connect, timeoutRead: timeout_read, proxy, caBundle: ca_bundle });
-  }
-
-  // -- denylist ---------------------------------------------------------------------------------
-  guard(method, url) {
-    if (!this.denylist.isDenied(url)) return;
-    if (this._allowOnceUrl && method === 'GET' && url === this._allowOnceUrl) {
-      this._allowOnceUrl = null; // exactly one request, then the door closes again
-      return;
-    }
-    throw new DeniedHostError(
-      `request to denylisted host '${hostOf(url)}' blocked. Only \`apitest fetch-spec\` may ` +
-        'download a spec from it; analyze and generate --dry-run work from the saved file.',
-    );
   }
 
   // -- sending ----------------------------------------------------------------------------------
@@ -263,7 +246,6 @@ export class SafeHttpClient {
       await this.rate_limiter.wait();
       const start = performance.now();
       try {
-        this.guard(method, url);
         const hdrs = { 'User-Agent': this.user_agent, 'Accept-Encoding': 'gzip, deflate', ...(headers || {}) };
         const resp = await this._transport({ method, url, headers: hdrs, body: content === null || content === undefined ? null : Buffer.from(content) });
         const elapsed = performance.now() - start;
@@ -272,7 +254,6 @@ export class SafeHttpClient {
         for (const [k, v] of Object.entries(resp.headers || {})) lower[k.toLowerCase()] = String(v);
         return new ResponseRecord({ status: resp.status, headers: lower, body: resp.body || Buffer.alloc(0), elapsed_ms: Math.round(elapsed * 10) / 10, attempts: attempt });
       } catch (exc) {
-        if (exc instanceof DeniedHostError) return new ResponseRecord({ status: null, error: exc.message, error_kind: 'denied', attempts: attempt });
         if (!(exc instanceof NetworkError)) throw exc;
         const elapsed = performance.now() - start;
         const kind = exc.timeout ? 'timeout' : 'network';

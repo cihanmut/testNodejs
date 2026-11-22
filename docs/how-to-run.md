@@ -7,7 +7,7 @@ Targets are defined in `config/apitest.yaml`.
 |---|---|---|
 | `simpleapi` | apichallenges.com Simple API (spec downloaded from the internet) | yes, at 1 request/second |
 | `simpleapi_offline` | same API, spec read from `tests/fixtures/` | only `run` sends requests |
-| `epias` | EPİAŞ fixture | **never**. `run` is blocked (exit code 4) |
+| `epiasQA` | EPİAŞ reporting-service (TGT auth). Points at the live host until the QA link is set | yes, at 5 requests/second (`company-test`) |
 
 ---
 
@@ -119,6 +119,7 @@ In the report:
 ./apitest run --target simpleapi --operation "get_*"          # only some operations (glob on operationId)
 ./apitest run --target simpleapi --method GET --method DELETE  # only some HTTP methods
 ./apitest run --target simpleapi --tag items                   # only one tag
+./apitest run --target epiasQA --path '/v1/data/eligible-consumer-and-meter-increases'   # one endpoint
 ./apitest report --run <runId>                                 # rebuild the report files
 ./apitest cleanup --run <runId>                                # delete leftovers if a run crashed
 ```
@@ -132,29 +133,100 @@ export TGT_TOKEN=<your ticket>
 If no credential is given, operations that need one run only the "missing credential must be rejected" test.
 Their other tests show as SKIPPED.
 
+### Testing only part of a spec (one controller or one endpoint)
+There are two ways. They select the same operations.
+
+**1. In the config, as the target's default:** the `filters:` block of a target in `config/apitest.yaml`.
+It applies to `generate` and `run` whenever you give no filter flag on the command line.
+```yaml
+  epiasQA:
+    ...
+    filters:
+      tags: [reportind-data-controller]     # only the services under this Swagger tag
+      paths: []                             # or one endpoint: ['/v1/data/eligible-consumer-and-meter-increases']
+      methods: []                           # e.g. [POST]
+      operations: []                        # operationId globs
+```
+- Empty lists (or no `filters:` block) = every operation.
+- Values in one list are OR-ed; different lists are AND-ed. To test **only** one endpoint, put it in
+  `paths` and empty `tags` (or keep the tag: the endpoint must then also carry that tag).
+- `paths` are globs on the Swagger path **without** the service base path: `/v1/data/*` = every
+  endpoint under `/v1/data/`.
+
+**2. On the command line, for one run:** `--tag`, `--path`, `--method`, `--operation` (all repeatable).
+Any of these flags **replaces** the whole `filters:` block for that run.
+```bash
+./apitest generate --target epiasQA --dry-run                                   # uses filters: from the config
+./apitest run --target epiasQA --tag reportind-data-controller                  # whole controller
+./apitest run --target epiasQA --path '/v1/data/eligible-consumer-and-meter-increases'   # one endpoint
+./apitest run --target epiasQA --path '/v1/data/*' --method POST                # all POSTs under /v1/data/
+```
+`generate` prints which filter is active. A tag or path that matches nothing prints a warning; for a tag
+the warning lists every tag of the spec, so a typo is easy to spot. `./apitest analyze --target epiasQA`
+also lists the spec's tags and operations.
+
 ---
 
-## Adding your work service as a target
-Add an entry under `targets:` in `config/apitest.yaml`. Copy the `epias` entry as a template:
+## Adding a new Swagger (a new target)
+Adding a target is **config only**: no code changes. Any API works this way, company or public.
+
+### Step 1: add an entry to `config/apitest.yaml`
+Only `spec` is required; every other key is optional. For an EPİAŞ service, copy the `epiasQA` entry
+and change `spec`, `base_url` and `filters`:
 ```yaml
-  my_service:
-    spec: https://my-test-env.company.local/my-service/v2/api-docs   # or a saved file
-    base_url: https://my-test-env.company.local/my-service
-    profile: company-test
-    auth:
+  my_service:                       # any name; you use it as --target my_service
+    spec: https://my-test-env.company.local/my-service/v2/api-docs   # URL or a saved .json/.yaml file
+    base_url: https://my-test-env.company.local/my-service           # must include the service base path
+    profile: company-test           # leave it out = public-demo (max 2 req/s); use company-test for work services
+    auth:                           # only if the API needs a credential
       header: TGT
       env: TGT_TOKEN
       unauth_expect: [401, 403, 302]
       login_redirect_pattern: "/cas/login"
-    exports:
+    exports:                        # only if the API has file-export endpoints
       tag_pattern: "-export-controller$"
       type_field: exportType
-    overrides: config/overrides/epias.yaml
-    rules: [config/rules/epias.yaml]
+    overrides: config/overrides/epias.yaml   # optional, see "Optional files" below
+    rules: [config/rules/epias.yaml]         # optional, see "Optional files" below
+    filters: { tags: [], paths: [] }         # optional: test only part of the spec
 ```
-Then start with `generate --dry-run`, then a `smoke` run, then `standard`. Services that create
-data also need a `resources:` file, so the tool can delete what it creates; see
-`config/resources/simpleapi.yaml` for an example.
+- `base_url`: for EPİAŞ services the base path is `/<name>-service` (e.g. `/reporting-service`). Without it
+  the requests go to the host root and fail. If you leave `base_url` out, the tool takes the server
+  from the Swagger itself.
+- Switching an environment (e.g. live → QA) = change the host in `spec` and `base_url`.
+
+### Step 2: check it (no tests are sent; only the Swagger is downloaded)
+```bash
+./apitest analyze  --target my_service              # servers, tags, which endpoints need a credential, doc problems
+./apitest generate --target my_service --dry-run    # which test cases would run
+```
+Just looking at a Swagger, without adding a target: `./apitest analyze --spec <url or file>`.
+
+### Step 3: run it
+First `--level smoke`, then `--level standard`, then look at the report.
+
+### Where the tests come from
+1. **The Swagger itself (automatic, every target).** Types, required fields, min/max, lengths, enums
+   and formats become tests: missing required field, value one past the limit, wrong type, ...
+   Most tests come from here.
+2. **`config/rules/domain_rules.yaml` (automatic, every target).** General checks most APIs should
+   pass, e.g. any date field gets `2023-02-30` (must be rejected). You never list this file;
+   it is always loaded (turn it off with `use_default_rules: false` on the target).
+3. **The target's own rules file (optional, you write it).** Rules the Swagger states only in
+   description text, which the tool cannot read. Examples: Simple API says "type must be cd, dvd,
+   book or blu-ray" only in text; EPİAŞ says "page size must be 10, 20, 24, 50 or 100".
+   See "Adding your own rules" below.
+
+### Optional files: do I need them?
+| Key | What it is | When you need it |
+|---|---|---|
+| `rules:` | extra rules from description text | **Not at first.** Add one later if you notice an important limit that is only in the text. Another EPİAŞ service can reuse `config/rules/epias.yaml`. Also used to replace a default rule that is wrong for this API (same `id`). |
+| `overrides:` | fixed values for the valid baseline request | Only if the tool cannot guess a valid request itself (e.g. EPİAŞ needs the `page` object). EPİAŞ services reuse `config/overrides/epias.yaml`. |
+| `resources:` | how to create and delete test data | Only for services that **create or delete data**, so the tool can clean up after itself. Read-only report services don't need it. Example: `config/resources/simpleapi.yaml`. |
+| `known_issues:` | defects you already know about | Only to mark known defects in the report. |
+
+**In short:** start with only `spec`, `base_url`, `profile` and `auth`, run it, and add the other
+files only if the report shows you need them.
 
 ---
 
@@ -165,7 +237,6 @@ data also need a `resources:` file, so the tool can delete what it creates; see
 | 1 | defects found, or cleanup problems |
 | 2 | aborted: the server was unhealthy or the credential expired |
 | 3 | wrong usage or config |
-| 4 | blocked by the host denylist |
 
 ## What gets tested
 | Technique | What it checks | Level |
@@ -197,7 +268,7 @@ The PNG is saved in the run folder as `apitest.png`, so the report's curl comman
 ```
 
 ### Adding your own rules
-Rules that exist only in documentation go in a YAML file listed under the target's `rules:`. For example, the Simple API's "price must be between 0 and 50000":
+Rules that exist only in documentation go in a YAML file listed under the target's `rules:` (optional; see "Where the tests come from" above). For example, the Simple API's "price must be between 0 and 50000":
 ```yaml
 rules:
   - id: SIMPLE-PRICE-ABOVE-MAX
@@ -206,7 +277,9 @@ rules:
     expect: reject          # reject = 4xx expected · accept = 2xx expected · no_5xx = just no server error
 ```
 A rule with the same `id` as a default rule (`config/rules/domain_rules.yaml`) replaces it for that
-target. Use this to set the real maximum date range of a service, for example.
+target. Use this to set the real maximum date range of a service, for example, or to change the
+`expect` of a default rule that is wrong for this API (e.g. the service correctly accepts dates without
+a timezone: re-define `DATE-NO-OFFSET` with `expect: accept`).
 
 ### Output files of every run
 `runs/<target>/<runId>/`:

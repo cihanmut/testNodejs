@@ -24,7 +24,7 @@ before(fast);
 
 // ---------------------------------------------------------------------------------------- rules
 test('rule files load and the target file overrides a default', () => {
-  const rules = Object.fromEntries(loadRules(cfg().target('epias').rules).map((r) => [r.id, r]));
+  const rules = Object.fromEntries(loadRules(petCfg().target('epias_offline').rules).map((r) => [r.id, r]));
   assert.ok('DATE-NO-OFFSET' in rules && 'EPIAS-ID-LIST-OVER-1000' in rules);
   assert.equal(rules['RANGE-TOO-LONG'].source, 'epias.yaml'); // same id later in the list replaces the default
 });
@@ -48,7 +48,7 @@ test('Simple API description rules become cases', async () => {
 });
 
 test('EPİAŞ date rules are single-field and valid', async () => {
-  const p = plan(cfg(), await epiasApi(), 'epias');
+  const p = plan(petCfg(), await epiasApi(), 'epias_offline');
   const op = p.ops.find((x) => x.baseline.body && typeof x.baseline.body === 'object' && 'startDate' in x.baseline.body && 'endDate' in x.baseline.body);
   const byRule = Object.fromEntries(op.cases.filter((c) => c.technique === 'D-domain').map((c) => [c.rule_id, c]));
   const after = byRule['RANGE-START-AFTER-END'];
@@ -65,7 +65,7 @@ test('EPİAŞ date rules are single-field and valid', async () => {
 });
 
 test('EPİAŞ id-list rules', async () => {
-  const cases = plan(cfg(), await epiasApi(), 'epias').cases.filter((c) => ['EPIAS-ID-LIST-OVER-1000', 'EPIAS-ID-LIST-DUPLICATES'].includes(c.rule_id));
+  const cases = plan(petCfg(), await epiasApi(), 'epias_offline').cases.filter((c) => ['EPIAS-ID-LIST-OVER-1000', 'EPIAS-ID-LIST-DUPLICATES'].includes(c.rule_id));
   assert.ok(cases.length);
   assert.equal(cases.find((c) => c.rule_id === 'EPIAS-ID-LIST-OVER-1000').mutation.value.length, 1001);
   const dup = cases.find((c) => c.rule_id === 'EPIAS-ID-LIST-DUPLICATES');

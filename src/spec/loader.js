@@ -1,5 +1,4 @@
-// Load a spec from a file, a URL or an editor.swagger.io link. URLs go through SafeHttpClient, so a
-// denylisted host is blocked here too (only `fetch-spec` gets a one-time exception).
+// Load a spec from a file, a URL or an editor.swagger.io link. URLs go through SafeHttpClient.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { parseJson } from '../util/json.js';

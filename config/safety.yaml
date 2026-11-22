@@ -1,8 +1,0 @@
-# Host denylist — HARD safety rule.
-# Denylisted hosts get no HTTP request except `apitest fetch-spec`; for their specs only `analyze`
-# and `generate --dry-run` are allowed. This file is always read from the config directory and is
-# merged with the built-in default (seffaflik.epias.com.tr), so the default can never be removed.
-# No CLI flag and no other config file can override it.
-denylist:
-  - host: seffaflik.epias.com.tr
-    reason: "EPİAŞ production — structural reference only, never send API requests"

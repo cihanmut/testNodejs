@@ -41,6 +41,32 @@ export class Filters {
   toDict() {
     return { tags: this.tags, paths: this.paths, methods: this.methods, operations: this.operations, op_keys: this.op_keys };
   }
+
+  /** The target's default filter (`filters:` in the target config); empty = all operations. */
+  static forTarget(target) {
+    const f = new Filters(target.filters || {});
+    f.fromTarget = true;
+    return f;
+  }
+
+  /** Warnings for filter values that match no operation of the spec at all (typos in a tag name etc.). */
+  unmatched(operations) {
+    const warnings = [];
+    const allTags = [...new Set(operations.flatMap((op) => op.tags))].sort();
+    for (const t of this.tags) {
+      if (!allTags.includes(t)) warnings.push(`tag '${t}' matches no operation. Tags in this spec: ${allTags.join(', ') || '(none)'}`);
+    }
+    for (const p of this.paths) {
+      if (!operations.some((op) => fnmatch(op.path, p))) warnings.push(`path '${p}' matches no operation (paths are globs on the spec path, e.g. '/v1/data/*')`);
+    }
+    for (const m of this.methods) {
+      if (!operations.some((op) => op.method === m.toUpperCase())) warnings.push(`method '${m}' matches no operation`);
+    }
+    for (const o of this.operations) {
+      if (!operations.some((op) => fnmatch(op.operation_id, o))) warnings.push(`operationId '${o}' matches no operation`);
+    }
+    return warnings;
+  }
 }
 
 export class OpPlan {
@@ -56,6 +82,7 @@ export class Plan {
     this.ops = ops;
     this.excluded_exports = 0;
     this.filtered_out = 0;
+    this.filter_warnings = []; // filter values that match nothing in the spec
     this.findings = []; // documentation findings found while generating
     this.ops_with_cases = 0;
   }
@@ -142,6 +169,8 @@ export function buildPlan(api, target, profile, {
   const seenPaths = new Set();
 
   const plan = new Plan({ target, level, ops: [] });
+  plan.filter_warnings = filters.unmatched(api.operations);
+  plan.filters_used = filters.toDict();
   for (const op of api.operations) {
     if (!filters.match(op)) {
       plan.filtered_out += 1;

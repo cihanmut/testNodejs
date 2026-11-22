@@ -5,7 +5,6 @@ import path from 'node:path';
 import { mask } from './auth/masking.js';
 import { buildProvider } from './auth/provider.js';
 import { credentialEnvName, resolveCredential } from './config/loader.js';
-import { DeniedHostError } from './config/safety.js';
 import { BaselineBuilder } from './data/baseline.js';
 import { ValueContext } from './data/values.js';
 import { Executor, loadPrevious, nowIso } from './execution/executor.js';
@@ -28,7 +27,6 @@ export const EXIT_OK = 0;
 export const EXIT_FAILURES = 1;
 export const EXIT_ABORTED = 2;
 export const EXIT_USAGE = 3;
-export const EXIT_DENIED = 4;
 
 export class RunError extends Error {
   constructor(message, code = EXIT_USAGE) {
@@ -41,12 +39,12 @@ export class RunError extends Error {
 /** Test hook: tests set this to an in-memory transport (like httpx.MockTransport in the Python tests). */
 export const testHooks = { transport: null };
 
-export function makeHttp(cfg, profile = null, { allowOnceUrl = null, transport = null } = {}) {
+export function makeHttp(cfg, profile = null, { transport = null } = {}) {
   const d = cfg.defaults;
-  return new SafeHttpClient(cfg.denylist, {
+  return new SafeHttpClient({
     timeout_connect: d.timeout_connect, timeout_read: d.timeout_read, retries: d.network_retries, backoff_s: d.retry_backoff_s,
     rate_limiter: new RateLimiter(profile ? profile.rate_limit_rps : null), proxy: d.proxy, ca_bundle: d.ca_bundle,
-    transport: transport || testHooks.transport, allow_once_url: allowOnceUrl,
+    transport: transport || testHooks.transport,
   });
 }
 
@@ -75,7 +73,7 @@ export function planFor(cfg, target, api, { level, runId, filters, includeExport
   if (problems.length) throw new RunError('resource config problems:\n  ' + problems.join('\n  '));
   const ctx = new ValueContext(runId, cfg.defaults.seed, target.timezone_offset);
   const plan = buildPlan(api, target, profile, {
-    level, runId, seed: cfg.defaults.seed, filters, includeExports, overrides: loadYamlFile(target.overrides) || {}, resources, valueCtx: ctx,
+    level, runId, seed: cfg.defaults.seed, filters: filters || Filters.forTarget(target), includeExports, overrides: loadYamlFile(target.overrides) || {}, resources, valueCtx: ctx,
     allowInjection: allowInjection && profile.allow_injection,
   });
   return [plan, ctx, resources];
@@ -127,13 +125,8 @@ export async function executeRun(cfg, targetName, {
   const target = cfg.target(targetName);
   const profile = cfg.profileFor(target);
   level = level || cfg.defaults.level;
-  filters = filters || new Filters();
+  filters = filters || Filters.forTarget(target); // CLI filters replace the target's default filter
   includeExports = includeExports === null || includeExports === undefined ? cfg.defaults.include_exports : includeExports;
-
-  // Hard safety gate BEFORE any network activity for a denylisted target.
-  if (cfg.denylist.isDenied(target.spec) || (target.base_url && cfg.denylist.isDenied(target.base_url))) {
-    throw new RunError(`target '${target.name}' is on the host denylist: only analyze and generate --dry-run are allowed`, EXIT_DENIED);
-  }
 
   const http = makeHttp(cfg, profile, { transport });
   let meta;
@@ -145,13 +138,11 @@ export async function executeRun(cfg, targetName, {
     let loaded;
     [api, loaded] = await loadTargetApi(cfg, target, http, specSource);
     const baseUrl = baseUrlFor(target, api);
-    if (cfg.denylist.isDenied(baseUrl)) {
-      throw new RunError(`target '${target.name}' base URL ${baseUrl} is on the host denylist: only analyze and generate --dry-run are allowed`, EXIT_DENIED);
-    }
     allowInjection = allowInjection && profile.allow_injection; // never on public-demo
     let ctx;
     let resourceDefs;
     [plan, ctx, resourceDefs] = planFor(cfg, target, api, { level, runId, filters, includeExports, allowInjection });
+    for (const w of plan.filter_warnings) echo(`warning: ${w}`);
     if (!plan.ops.length) throw new RunError('no operations match the filters');
 
     runDir = path.join(runsDir, target.name, runId);
@@ -183,9 +174,6 @@ export async function executeRun(cfg, targetName, {
     });
     if (resume) executor.resources.created = pendingFromRegistry(path.join(runDir, 'created_resources.jsonl')).map(([k, rid]) => new Resource(k, rid));
     outcome = await executor.run();
-  } catch (exc) {
-    if (exc instanceof DeniedHostError) throw new RunError(exc.message, EXIT_DENIED);
-    throw exc;
   } finally {
     http.close();
   }
@@ -300,7 +288,6 @@ export async function cleanupRun(cfg, run, { credential = null, credentialEnv = 
     return EXIT_OK;
   }
   const target = cfg.target(m.target);
-  if (cfg.denylist.isDenied(m.base_url)) throw new RunError('denylisted host', EXIT_DENIED);
   const http = makeHttp(cfg, cfg.profileFor(target), { transport });
   let problems;
   try {

@@ -15,8 +15,8 @@ Status: Phases 1–3 implemented, same as the Python version. Two items were lef
 - Must run on Windows: use `node:path`, UTF-8 files, no shell-outs. Launchers: `apitest.cmd` (Windows) and `./apitest` (bash).
 
 ## Dev commands
-- Tests (offline, 92): `npm test` (= `node tests/run.js`, uses `node:test`). No live/integration tests.
-- CLI: `./apitest <cmd>` or `node src/cli.js <cmd>`. Dry-run examples: `generate --target epias --dry-run`, `generate --target simpleapi_offline --dry-run`.
+- Tests (offline, 90): `npm test` (= `node tests/run.js`, uses `node:test`). No live/integration tests.
+- CLI: `./apitest <cmd>` or `node src/cli.js <cmd>`. Dry-run example: `generate --target simpleapi_offline --dry-run` (offline). `epiasQA` loads its spec from the network, even for a dry run.
 - Parity check against Python (only on the Mac): compare `generate --dry-run --level full --include-exports --csv` outputs of both tools; re-render a Python run folder with `./apitest report --run <path>`.
 
 ## Code map (mirrors the Python package)
@@ -24,7 +24,7 @@ Status: Phases 1–3 implemented, same as the Python version. Two items were lef
   - `json.js`: lossless JSON. Ints beyond 2^53 become BigInt; `dumps` uses Python's `json.dumps` separators; `RawNumber` for display.
   - `py.js`: `repr`/`str`, fnmatch, Python regexes with `(?i)`, deepCopy/deepEqual, Counter, half-even rounding.
   - `dates.js`, `url.js` (Python `quote`/`urlencode`), `yaml.js`, `binary.js` (crc32).
-- `config/`: `models.js` (sections with unknown-key rejection), `loader.js`, `safety.js` (denylist).
+- `config/`: `models.js` (sections with unknown-key rejection), `loader.js`. A target's `filters:` block (tags/paths/methods/operations) is its default operation filter; any CLI filter flag replaces it.
 - `spec/`: `loader.js`, `normalize.js` (v2/v3 → model; `$ref`s cached, so cycles are safe), `analyze.js`, `diff.js`.
 - `auth/`: `detect.js`, `provider.js` (AuthProvider, NoAuth, StaticHeaderAuth), `masking.js`.
 - `data/`: `request.js` (RequestTemplate, OMIT/NO_BODY, FileValue, ResourceRef), `values.js` (`Rng` = CPython Mersenne Twister, templates), `smartDefaults.js`, `baseline.js`.
@@ -34,14 +34,15 @@ Status: Phases 1–3 implemented, same as the Python version. Two items were lef
   - `plan.js`: registers the generators in the Python import order, then filters, levels and skip reasons.
 - `resources/`: `definitions.js`, `manager.js` (async; pools, dispose/retire, tombstones, verify with backoff, registry jsonl).
 - `execution/`:
-  - `http.js`: the ONLY network code. Denylist guard, rate limit, network-only retries, no redirects, proxy and CA bundle. The `transport` is injectable for tests.
+  - `http.js`: the ONLY network code. Rate limit, network-only retries, no redirects, proxy and CA bundle. The `transport` is injectable for tests.
   - `encoding.js`, `executor.js` (async; Ctrl+C → finish the current request, then teardown).
 - `oracle/`: `oracle.js`, `schemaValidate.js` (model → draft-07 → built-in validator).
 - `report/`: `model.js`, `html.js`, `curl.js`, `exports.js` (JUnit/CSV/XLSX), `xlsx.js` (zip writer).
 - `runner.js`: orchestration and exit codes; `testHooks.transport` lets CLI tests inject a fake transport.
 - `cli.js`: argument parser and commands; `main(argv, {out, err})` returns the exit code.
 - `tests/`: `fakes.js` (FakePetstore and the export fake as transports), `helpers.js` (`cfg()` = main config, `petCfg()` = test-only `tests/config/apitest.yaml`), `unit/*.test.js`.
-- Petstore is **not a real target** any more (2026-11-21, user decision: the public demo is unreliable). Only `simpleapi` and `epias` are targets. Petstore survives only as offline test data: `tests/config/` (petstore_v3_offline/petstore_v2_offline targets + their resources/overrides/rules) + fixtures + FakePetstore, because they cover auth, multipart/form and int64 IDs that Simple API cannot. Don't add Petstore back to `config/`.
+- Petstore is **not a real target** any more (2026-11-21, user decision: the public demo is unreliable). Only `simpleapi` and `epiasQA` are targets. Petstore survives only as offline test data: `tests/config/` (petstore_v3_offline/petstore_v2_offline targets + their resources/overrides/rules) + fixtures + FakePetstore, because they cover auth, multipart/form and int64 IDs that Simple API cannot. Don't add Petstore back to `config/`.
+- The old `epias` target was removed (2026-11-22, user decision). The electricity-service fixture survives only as the test target `epias_offline` in `tests/config/` (TGT auth, export controllers, `config/rules/epias.yaml`).
 
 ## JavaScript-specific invariants (don't break them)
 - **int64 IDs:** parse every response and file with `parseJson`, never `JSON.parse`. Write JSON with `dumps`. `normInt` keeps safe integers as numbers, so `===` works. Petstore pet IDs are about 9e18, and losing precision would delete the wrong pet.
@@ -60,9 +61,9 @@ Status: Phases 1–3 implemented, same as the Python version. Two items were lef
 - Credential expiry is assumed only after the credential worked earlier in the run. Those cases get `final=false`, so resume re-runs them.
 
 ## HARD SAFETY RULES (never break, not even "just to check")
-1. **Never send any request to `seffaflik.epias.com.tr`** (EPİAŞ): not from the tool, not from Claude via curl, WebFetch or a browser. The spec is already saved in `tests/fixtures/epias_electricity_swagger.json`. **Do not download it again.**
-2. The tool enforces a **host denylist from the config** (`config/safety.yaml` plus the built-in default). Denylisted hosts allow only `analyze` and `--dry-run`. **No CLI flag may override it.**
-3. Real runs only against the public Simple API demo (apichallenges.com). They are shared servers:
+1. The tool has **no host denylist** any more (2026-11-22, user decision; `safety.yaml`/`safety.js` and exit code 4 were removed). Don't add one back.
+2. `epiasQA` (EPİAŞ reporting-service) points at the live host `seffaflik.epias.com.tr` until the user gives the QA link. Claude does not send requests there itself (no `run`/`generate`/`analyze` on `epiasQA`, curl, WebFetch or browser); the user runs it.
+3. Claude's own real runs only against the public Simple API demo (apichallenges.com). They are shared servers:
    - ≤ 2 req/s;
    - PUT/DELETE only on resources this run created;
    - always clean up;

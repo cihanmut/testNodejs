@@ -35,25 +35,26 @@ node src/cli.js --help           # anywhere
 ## Commands
 
 ```bash
-apitest analyze  --target epias                          # Step-0 statistics + documentation findings
-apitest generate --target epias --dry-run [--level full] [--include-exports] [--tag T] [--csv cases.csv]
+apitest analyze  --target epiasQA                        # Step-0 statistics + documentation findings
+apitest generate --target epiasQA --dry-run [--level full] [--include-exports] [--tag T] [--csv cases.csv]
 apitest run      --target simpleapi --level standard               # shared public demo, 1 req/s
 apitest run      --resume <runId> --credential-env TGT_TOKEN        # e.g. after the credential expired
 apitest report   --run <runId>                           # re-render HTML, JUnit, CSV, Excel
 apitest cleanup  --run <runId>                           # retry deleting leftovers of a run
 apitest diff     <old spec|runId> <new spec|URL>         # what changed between two spec versions
 apitest run      --target simpleapi --changed-since <runId>  # test only new/changed operations
-apitest fetch-spec <url|editor link> --out tests/fixtures/x.json      # only way to touch a denylisted host
+apitest fetch-spec <url|editor link> --out tests/fixtures/x.json      # save a spec to a file
 ```
 
 - **Filters:** `--tag`, `--path` (glob), `--method`, `--operation` (operationId glob). All are repeatable.
+  A target can set default filters in its `filters:` config block; any filter flag replaces it for that run
+  (see `docs/how-to-run.md`, "Testing only part of a spec").
 - **Levels:** `smoke` (baseline + auth) ⊂ `standard` ⊂ `full`.
 - **Exit codes:**
   - 0: ok
   - 1: failures or cleanup problems
   - 2: aborted (unhealthy server or expired credential)
   - 3: usage or config error
-  - 4: blocked by the denylist
 
 Every run writes these files to `runs/<target>/<runId>/`:
 
@@ -79,8 +80,6 @@ name instead: `$TGT_TOKEN` in bash, `$env:TGT_TOKEN` in PowerShell.
 
 ## Safety
 
-- `config/safety.yaml` and the built-in default list hosts that must never receive requests
-  (EPİAŞ). No CLI flag can override them.
 - The `public-demo` profile is enforced in code:
   - at most 2 requests per second;
   - PUT/DELETE only on resources this run created;
