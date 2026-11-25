@@ -52,6 +52,80 @@ The variable exists only in that window. If you open a new window, or your TGT e
 (exit code 2), set it again. After it expires, continue with `run --resume <runId>`.
 The curl commands in the report have a **PowerShell** tab that uses `curl.exe` and `$env:...`.
 
+### Testing only part of a spec (one controller or one endpoint)
+You can limit a run in two ways. Both select the same operations:
+- **In the config**, as the target's default: the `filters:` block in `config/apitest.yaml`
+  (explained in the Mac section, ["Testing only part of a spec"](#testing-only-part-of-a-spec-one-controller-or-one-endpoint-1);
+  the YAML is the same on Windows).
+- **On the command line**, for one run only, with these four flags:
+
+| Flag | Selects operations by | Example value |
+|---|---|---|
+| `--tag` | Swagger tag (the controller name shown in Swagger UI) | `reportind-data-controller` |
+| `--path` | path, **without** the service base path; `*` is a wildcard | `/v1/data/eligible-consumer-and-meter-increases` or `/v1/data/*` |
+| `--method` | HTTP method | `GET`, `POST`, `PUT`, `DELETE` |
+| `--operation` | operationId; `*` is a wildcard | `"get_*"` |
+
+How the flags combine:
+- **Any** of these flags **replaces the whole `filters:` block** of the target for that run. Flags you don't
+  give are not taken from the config; they simply mean "no limit".
+- Give a flag **several times** to allow several values (OR): `--method GET --method POST` = GET **or** POST.
+- **Different** flags must **all** match (AND): `--path "/v1/data/*" --method POST` = POSTs under `/v1/data/`.
+
+**Always look first with a dry-run.** It sends no tests (for `epiasQA` it only downloads the Swagger) and
+prints which filter is active and which cases would run:
+```powershell
+.\apitest.cmd generate --target epiasQA --dry-run                                       # filter from the config
+.\apitest.cmd generate --target epiasQA --dry-run --tag reportind-data-controller       # filter from the flag
+```
+If a tag or path matches nothing, you get a warning. For a tag, the warning lists every tag of the spec,
+so a typo is easy to spot. `.\apitest.cmd analyze --target epiasQA` also lists all tags and operations.
+
+**Examples in PowerShell** (set `$env:TGT_TOKEN` first, see above):
+```powershell
+# 1. The whole controller (every endpoint under one Swagger tag)
+.\apitest.cmd run --target epiasQA --tag reportind-data-controller
+
+# 2. Exactly one endpoint
+.\apitest.cmd run --target epiasQA --path "/v1/data/eligible-consumer-and-meter-increases"
+
+# 3. Every endpoint under /v1/data/, but only the POST ones
+.\apitest.cmd run --target epiasQA --path "/v1/data/*" --method POST
+
+# 4. Two endpoints in one run (repeat the flag)
+.\apitest.cmd run --target epiasQA --path "/v1/data/eligible-consumer-and-meter-increases" --path "/v1/data/<other-endpoint>"
+
+# 5. Two controllers in one run
+.\apitest.cmd run --target epiasQA --tag reportind-data-controller --tag <other-controller>
+
+# 6. Only operations whose operationId starts with "get"
+.\apitest.cmd run --target simpleapi --operation "get*"
+
+# 7. A quick check of one endpoint first, then the full set of tests for it
+.\apitest.cmd run --target epiasQA --path "/v1/data/eligible-consumer-and-meter-increases" --level smoke
+.\apitest.cmd run --target epiasQA --path "/v1/data/eligible-consumer-and-meter-increases" --level standard
+
+# 8. No flag: the target's filters: block from config/apitest.yaml is used
+.\apitest.cmd run --target epiasQA
+```
+
+**The same in cmd.exe:**
+```cmd
+set TGT_TOKEN=<your TGT>
+apitest run --target epiasQA --tag reportind-data-controller
+apitest run --target epiasQA --path "/v1/data/eligible-consumer-and-meter-increases"
+apitest run --target epiasQA --path "/v1/data/*" --method POST
+```
+
+**Quoting on Windows** (the most common mistake):
+- Use **double quotes** `"..."`. In cmd.exe, single quotes are *not* quotes: `'/v1/data/x'` reaches the
+  tool with the `'` characters in it and matches nothing. (The Mac examples use single quotes; on
+  Windows, change them to double quotes.)
+- Always quote values with `*`, spaces, `&`, `|`, `<`, `>` or `^`.
+- Write paths with forward slashes `/`, exactly as in the Swagger, even on Windows.
+- `--tag`, `--path` and `--operation` are case-sensitive; copy the values from Swagger UI or from
+  the `analyze` output. `--method` is not (`post` = `POST`).
+
 ### Company network: proxy and certificates
 - **Proxy:** set `proxy:` in `config/apitest.yaml` (e.g. `http://proxy.company.local:8080`), or set
   the `HTTPS_PROXY` environment variable. `NO_PROXY` is honoured for internal hosts.
