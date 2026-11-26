@@ -86,6 +86,7 @@ export function loadConfig(configPath = null) {
     const tgt = buildSection(targetDefaults(), { name, spec, ...tdata, rules: rulePaths, auth, expectations, exports, envelope, filters }, where);
     if (!(tgt.profile in profiles)) throw new ConfigError(`${where}: unknown profile '${tgt.profile}'`);
     if (!['reject', 'accept', 'ignore'].includes(tgt.unknown_fields)) throw new ConfigError(`${where}: unknown_fields must be reject, accept or ignore`);
+    if (typeof tgt.allow_null_in_responses !== 'boolean') throw new ConfigError(`${where}: allow_null_in_responses must be true or false`);
     for (const p of tgt.rules) {
       if (!fs.existsSync(p)) throw new ConfigError(`${where}: rules file not found: ${p}`);
     }

@@ -1,5 +1,7 @@
 # How to run the tool (Node.js version)
 
+> Türkçe sürüm: [how-to-run.tr.md](how-to-run.tr.md). Keep both files in sync when you change one.
+
 The tool has a few everyday commands. You always tell it **which API** to test with `--target`.
 Targets are defined in `config/apitest.yaml`.
 
@@ -263,11 +265,18 @@ and change `spec`, `base_url` and `filters`:
     overrides: config/overrides/epias.yaml   # optional, see "Optional files" below
     rules: [config/rules/epias.yaml]         # optional, see "Optional files" below
     filters: { tags: [], paths: [] }         # optional: test only part of the spec
+    allow_null_in_responses: true            # optional: a null response field is not an error (see below)
 ```
 - `base_url`: for EPİAŞ services the base path is `/<name>-service` (e.g. `/reporting-service`). Without it
   the requests go to the host root and fail. If you leave `base_url` out, the tool takes the server
   from the Swagger itself.
 - Switching an environment (e.g. live → QA) = change the host in `spec` and `base_url`.
+- `allow_null_in_responses`: some services (all EPİAŞ services) return `null` for a field when there is
+  no data, even though the Swagger documents the field as a number or string. Without this option every
+  such response fails with e.g. `data.items[0].value must be number`. With `true`, `null` is accepted for
+  **every** field of every response body (and a whole `null` body too). Values that are not `null` are
+  still fully checked (type, enum, min/max, ...), and required fields must still be present. Default:
+  `false`. `epiasQA` has it on.
 
 ### Step 2: check it (no tests are sent; only the Swagger is downloaded)
 ```bash
@@ -324,7 +333,7 @@ files only if the report shows you need them.
 | **E-protocol** | Malformed JSON, empty body, body as an array, wrong Content-Type, unknown field, undocumented method → 405, unknown path → 404, ID that doesn't exist → 404, and (at full) special characters, unicode, very long strings. | standard / full |
 | **F-export** | Each file type of an export operation (XLSX/CSV/PDF): file signature, Content-Type, file name, "JSON instead of a file". Needs `--include-exports`. | standard |
 | **E-injection** | SQL/script/template strings. Needs `--allow-injection` and a profile that allows it; never on public demo servers. | full |
-| **F (every test)** | Status code, Content-Type, response time, body against the documented schema (also for error bodies), error envelope inside a 2xx. | always |
+| **F (every test)** | Status code, Content-Type, response time, body against the documented schema (also for error bodies; `null` fields pass if the target has `allow_null_in_responses: true`), error envelope inside a 2xx. | always |
 
 ### Request body types
 JSON is used whenever an operation accepts it. Otherwise the tool sends:

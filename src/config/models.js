@@ -77,6 +77,7 @@ export const targetDefaults = () => ({
   use_default_rules: true, // also load defaults.rules_file
   unknown_fields: 'ignore', // unknown body field: reject | accept | ignore (no 5xx)
   timezone_offset: '+03:00',
+  allow_null_in_responses: false, // true: a null response field never fails the schema check ("no data" = null)
 });
 
 export const defaultsDefaults = () => ({

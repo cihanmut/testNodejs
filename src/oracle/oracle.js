@@ -50,13 +50,13 @@ function documented(op, status) {
 const isBlank = (buf) => buf.toString('utf8').trim() === '';
 
 export class Oracle {
-  constructor(knownIssues = null, responseTimeWarnMs = 3000, loginRedirectPattern = null, envelope = null, exports = null) {
+  constructor(knownIssues = null, responseTimeWarnMs = 3000, loginRedirectPattern = null, envelope = null, exports = null, allowNull = false) {
     this.envelope = envelope; // envelope config or null
     this.exports = exports; // exports config or null (type_field: which body field picks the file type)
     this.known_issues = knownIssues || [];
     this.slow_ms = responseTimeWarnMs;
     this.login_pattern = loginRedirectPattern ? pyRegex(loginRedirectPattern) : null;
-    this.validator = new SchemaValidator();
+    this.validator = new SchemaValidator(allowNull); // allowNull: any response field may be null
   }
 
   evaluate(c, op, resp, requestBody = null) {

@@ -75,3 +75,34 @@ test('network error is ERROR', async () => {
   const v = new Oracle().evaluate(kase('accept'), (await petv3Api()).operation('getPetById'), new ResponseRecord({ status: null, error: 'ConnectError: boom', error_kind: 'network' }));
   assert.equal(v.status, 'ERROR');
 });
+
+test('allow_null_in_responses: null fields pass, wrong non-null types still fail', async () => {
+  const { SchemaValidator } = await import('../../src/oracle/schemaValidate.js');
+  const { Schema } = await import('../../src/spec/model.js');
+  const item = new Schema({
+    ref_name: 'Item',
+    properties: {
+      value: new Schema({ type: 'number' }),
+      kind: new Schema({ type: 'string', enum: ['A', 'B'] }),
+      tags: new Schema({ type: 'array', items: new Schema({ type: 'string' }) }),
+      either: new Schema({ one_of: [new Schema({ type: 'integer' }), new Schema({ type: 'string' })] }),
+    },
+    required: new Set(['value']),
+  });
+  const body = new Schema({ type: 'object', properties: { items: new Schema({ type: 'array', items: item }), total: new Schema({ type: 'integer' }) } });
+  const nulls = { items: [{ value: null, kind: null, tags: [null], either: null }], total: null };
+  assert.match(new SchemaValidator().validate(body, nulls), /data\.items\[0\]\.value must be number/);
+  const lenient = new SchemaValidator(true);
+  assert.equal(lenient.validate(body, nulls), null);
+  assert.equal(lenient.validate(body, null), null); // whole body null = no data
+  assert.match(lenient.validate(body, { items: [{ value: 'x' }] }), /value must be number or null/);
+  assert.match(lenient.validate(body, { items: [{ kind: null }] }), /must contain \['value'\] properties/); // required still checked
+  assert.match(lenient.validate(body, { items: [{ value: 1, kind: 'C' }] }), /must be one of/);
+});
+
+test('allow_null_in_responses is read from the target config (epiasQA has it on)', async () => {
+  const { cfg } = await import('../helpers.js');
+  const c = cfg();
+  assert.equal(c.target('epiasQA').allow_null_in_responses, true);
+  assert.equal(c.target('simpleapi').allow_null_in_responses, false);
+});

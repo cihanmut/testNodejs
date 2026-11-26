@@ -167,7 +167,7 @@ export async function executeRun(cfg, targetName, {
 
     echo(`run ${runId}: ${plan.cases.length} cases on ${plan.ops.length} operations, level ${level}, profile ${profile.name} (${profile.rate_limit_rps} req/s), credential ${credText}`);
     const builder = new BaselineBuilder(target, ctx, loadYamlFile(target.overrides) || {}, inferBindings(api, resourceDefs), resourceDefs);
-    const oracle = new Oracle(loadKnownIssues(target.known_issues), cfg.defaults.response_time_warn_ms, target.auth.login_redirect_pattern, target.envelope, target.exports);
+    const oracle = new Oracle(loadKnownIssues(target.known_issues), cfg.defaults.response_time_warn_ms, target.auth.login_redirect_pattern, target.envelope, target.exports, target.allow_null_in_responses);
     executor = new Executor({
       api, plan, target, defaults: cfg.defaults, http, base_url: baseUrl, provider, oracle, resource_defs: resourceDefs, builder,
       credential_env: envName, run_dir: runDir, previous, progress,

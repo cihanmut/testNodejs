@@ -5,7 +5,7 @@ This is the **Node.js port** (2026-11-18) of the Python tool in `../API_Manuel_T
 The reason for the port: the user's Windows 11 work laptop may not download or run Python, but Node.js is available.
 The port keeps the **exact same working logic**: modules ported one-to-one, same config/run-folder/report formats.
 How each Python library was replaced, how parity was verified, and the known small differences: `docs/porting-notes.md`.
-User guide: `docs/how-to-run.md`. Step 0 analysis: `docs/step0-analysis.md`. Design: `docs/implementation-plan.md` (written for Python; the architecture is unchanged).
+User guide: `docs/how-to-run.md` (English) + `docs/how-to-run.tr.md` (Turkish): **keep both in sync**, every change to one goes into the other in the same commit. Step 0 analysis: `docs/step0-analysis.md`. Design: `docs/implementation-plan.md` (written for Python; the architecture is unchanged).
 Status: Phases 1–3 implemented, same as the Python version. Two items were left out on the user's decision: the CAS service-ticket provider and CI files.
 
 ## Hard constraint of this port: ZERO install on the work PC
@@ -15,7 +15,7 @@ Status: Phases 1–3 implemented, same as the Python version. Two items were lef
 - Must run on Windows: use `node:path`, UTF-8 files, no shell-outs. Launchers: `apitest.cmd` (Windows) and `./apitest` (bash).
 
 ## Dev commands
-- Tests (offline, 90): `npm test` (= `node tests/run.js`, uses `node:test`). No live/integration tests.
+- Tests (offline, 92): `npm test` (= `node tests/run.js`, uses `node:test`). No live/integration tests.
 - CLI: `./apitest <cmd>` or `node src/cli.js <cmd>`. Dry-run example: `generate --target simpleapi_offline --dry-run` (offline). `epiasQA` loads its spec from the network, even for a dry run.
 - Parity check against Python (only on the Mac): compare `generate --dry-run --level full --include-exports --csv` outputs of both tools; re-render a Python run folder with `./apitest report --run <path>`.
 
@@ -59,6 +59,7 @@ Status: Phases 1–3 implemented, same as the Python version. Two items were lef
 - `probe` create ops get a freshly probed free ID before every request. `also_created_by` bulk IDs are registered and deleted.
 - Example/default values of the wrong type are converted or ignored, and reported as `example_type_mismatch`.
 - Credential expiry is assumed only after the credential worked earlier in the run. Those cases get `final=false`, so resume re-runs them.
+- `allow_null_in_responses` (target, Node-only, on for `epiasQA`): every response field may be `null`; non-null values are still fully checked. Default false keeps Python parity.
 
 ## HARD SAFETY RULES (never break, not even "just to check")
 1. The tool has **no host denylist** any more (2026-11-22, user decision; `safety.yaml`/`safety.js` and exit code 4 were removed). Don't add one back.

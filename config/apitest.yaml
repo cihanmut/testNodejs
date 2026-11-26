@@ -68,6 +68,9 @@ targets:
       type_field: exportType
     overrides: config/overrides/epias.yaml
     rules: [config/rules/epias.yaml]
+    # EPİAŞ services return null for a field when there is no data. true = a null value in a response
+    # never fails the schema check ("must be number" etc.); non-null values are still fully checked.
+    allow_null_in_responses: true
     # Which operations to test. Used whenever the command line has no --tag/--path/--method/--operation
     # flag (any such flag replaces this whole block for that run). Empty lists = every operation.
     # Within one list any value may match (OR); different lists must all match (AND).

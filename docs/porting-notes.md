@@ -53,3 +53,10 @@ your way using the Python module names (`spec/normalize.py` → `src/spec/normal
 - **Proxy:** Python's httpx and this version both support plain or Basic-auth proxies. Neither
   supports NTLM/Kerberos proxies.
 - **`tool_version`** in `run.json` is `0.3.0-node`.
+
+## Node-only features (added after the port, not in the Python version)
+
+- **`allow_null_in_responses`** (target option, 2026-11-26): when `true`, every field of a response body
+  may be `null` without failing the schema check (EPİAŞ services return `null` when there is no data).
+  Implemented in `src/oracle/schemaValidate.js` (`toJsonSchema(root, allowNull)`). Default `false`, so
+  parity with Python holds for every target that doesn't set it.

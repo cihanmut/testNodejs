@@ -10,7 +10,9 @@ const KEEP_FORMATS = new Set(['date-time', 'date', 'email', 'uuid']);
 const PASSTHROUGH = ['minimum', 'maximum', 'multipleOf', 'minLength', 'maxLength', 'pattern', 'minItems', 'maxItems', 'uniqueItems'];
 const isNum = (v) => typeof v === 'number' || typeof v === 'bigint';
 
-export function toJsonSchema(root) {
+/** allowNull: every value in the schema may also be null (target option `allow_null_in_responses`:
+ *  services that return null for "no data" instead of omitting the field). */
+export function toJsonSchema(root, allowNull = false) {
   const defs = {};
   const conv = (s, inline = false) => {
     if (s.ref_name && !inline) {
@@ -23,8 +25,9 @@ export function toJsonSchema(root) {
     }
     const out = {};
     const t = s.effective_type;
-    if (t) out.type = s.nullable ? [t, 'null'] : t;
-    if (s.enum !== null) out.enum = [...s.enum, ...(s.nullable && !s.enum.includes(null) ? [null] : [])];
+    const nullable = s.nullable || allowNull;
+    if (t) out.type = nullable ? [t, 'null'] : t;
+    if (s.enum !== null) out.enum = [...s.enum, ...(nullable && !s.enum.includes(null) ? [null] : [])];
     if (t === 'string' && KEEP_FORMATS.has(s.format)) out.format = s.format;
     for (const key of PASSTHROUGH) if (key in s.constraints) out[key] = s.constraints[key];
     for (const [key, bound] of [['exclusiveMinimum', 'minimum'], ['exclusiveMaximum', 'maximum']]) {
@@ -42,7 +45,7 @@ export function toJsonSchema(root) {
     if (s.items !== null) out.items = conv(s.items);
     if (s.additional_properties instanceof Schema) out.additionalProperties = conv(s.additional_properties);
     else if (s.additional_properties === false) out.additionalProperties = false;
-    if (s.one_of.length) out.anyOf = s.one_of.map((x) => conv(x));
+    if (s.one_of.length) out.anyOf = [...s.one_of.map((x) => conv(x)), ...(allowNull ? [{ type: 'null' }] : [])];
     return out;
   };
   const body = conv(root);
@@ -157,7 +160,8 @@ function check(schema, data, path, root) {
 }
 
 export class SchemaValidator {
-  constructor() {
+  constructor(allowNull = false) {
+    this.allowNull = allowNull;
     this._cache = new Map();
   }
 
@@ -166,7 +170,7 @@ export class SchemaValidator {
     let js = this._cache.get(schema);
     if (!js) {
       try {
-        js = toJsonSchema(schema);
+        js = toJsonSchema(schema, this.allowNull);
       } catch (exc) {
         js = exc;
       }
