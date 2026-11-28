@@ -81,6 +81,30 @@ test('baseline failure skips the operation', async () => {
   assert.equal(code, EXIT_FAILURES);
 });
 
+test('run_after_baseline_failure: the other cases still run, each with an info note', async () => {
+  const c = petCfg();
+  assert.equal(c.target('petstore_v3_offline').run_after_baseline_failure, false);
+  c.targets.petstore_v3_offline.run_after_baseline_failure = true;
+  const fake = new FakePetstore({ apiKey: KEY, failCreate: true });
+  let runDir;
+  let code;
+  try {
+    [runDir, code] = await run(fake, { filters: new Filters({ operations: ['addPet'] }) });
+  } finally {
+    c.targets.petstore_v3_offline.run_after_baseline_failure = false;
+  }
+  const rs = results(runDir);
+  const base = rs.find((r) => r.case.technique === 'BASE');
+  assert.equal(base.status, 'BASELINE_FAILED');
+  const others = rs.filter((r) => r !== base);
+  assert.ok(others.length > 1);
+  const ran = others.filter((r) => !(r.status === 'SKIPPED' && (r.reason || '').includes('baseline')));
+  assert.equal(ran.length, others.length);
+  assert.ok(ran.filter((r) => r.status !== 'SKIPPED').every((r) => r.findings.some((f) => f.category === 'baseline' && f.severity === 'info')));
+  assert.equal(code, EXIT_FAILURES);
+  assert.equal(fake.pets.size, 0);
+});
+
 test('unhealthy environment aborts', async () => {
   const c = petCfg();
   c.defaults.health_baseline_window = 3;

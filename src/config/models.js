@@ -78,6 +78,7 @@ export const targetDefaults = () => ({
   unknown_fields: 'ignore', // unknown body field: reject | accept | ignore (no 5xx)
   timezone_offset: '+03:00',
   allow_null_in_responses: false, // true: a null response field never fails the schema check ("no data" = null)
+  run_after_baseline_failure: false, // true: a failed baseline no longer skips the operation's other cases
 });
 
 export const defaultsDefaults = () => ({

@@ -266,6 +266,7 @@ and change `spec`, `base_url` and `filters`:
     rules: [config/rules/epias.yaml]         # optional, see "Optional files" below
     filters: { tags: [], paths: [] }         # optional: test only part of the spec
     allow_null_in_responses: true            # optional: a null response field is not an error (see below)
+    run_after_baseline_failure: true         # optional: a failed baseline does not skip the other tests (see below)
 ```
 - `base_url`: for EPİAŞ services the base path is `/<name>-service` (e.g. `/reporting-service`). Without it
   the requests go to the host root and fail. If you leave `base_url` out, the tool takes the server
@@ -276,6 +277,15 @@ and change `spec`, `base_url` and `filters`:
   such response fails with e.g. `data.items[0].value must be number`. With `true`, `null` is accepted for
   **every** field of every response body (and a whole `null` body too). Values that are not `null` are
   still fully checked (type, enum, min/max, ...), and required fields must still be present. Default:
+  `false`. `epiasQA` has it on.
+- `run_after_baseline_failure`: every operation first sends one valid request (the *baseline*). If it
+  fails (e.g. `400` because a business rule rejects a generated value), the operation shows
+  `BASELINE_FAILED` and, by default, all its other tests are `SKIPPED`. With `true` they run anyway.
+  Each of them gets an info finding "baseline of this operation failed ...", because its result may come
+  from the same problem and not from the tested change (e.g. a "must be rejected" test that passes with
+  `400` only because the baseline was already rejected). Network errors/timeouts on the baseline still
+  skip the operation, and the unhealthy-environment abort still applies. Better fix when you can: give
+  the field a valid value in `overrides:` (see "Optional files") so the baseline passes. Default:
   `false`. `epiasQA` has it on.
 
 ### Step 2: check it (no tests are sent; only the Swagger is downloaded)

@@ -60,3 +60,7 @@ your way using the Python module names (`spec/normalize.py` → `src/spec/normal
   may be `null` without failing the schema check (EPİAŞ services return `null` when there is no data).
   Implemented in `src/oracle/schemaValidate.js` (`toJsonSchema(root, allowNull)`). Default `false`, so
   parity with Python holds for every target that doesn't set it.
+- **`run_after_baseline_failure`** (target option, 2026-11-28): when `true`, a `BASELINE_FAILED` baseline
+  no longer skips the operation's other cases; each of them gets an info finding (category `baseline`).
+  A baseline `ERROR` (network/timeout) still skips. Implemented in `Executor.runOperation`. Default
+  `false` keeps Python parity.

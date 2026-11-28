@@ -266,6 +266,7 @@ kaydını kopyalayın ve `spec`, `base_url` ve `filters` değerlerini değiştir
     rules: [config/rules/epias.yaml]         # isteğe bağlı, aşağıdaki "İsteğe bağlı dosyalar" bölümüne bakın
     filters: { tags: [], paths: [] }         # isteğe bağlı: spec'in yalnızca bir kısmını test et
     allow_null_in_responses: true            # isteğe bağlı: yanıttaki null alan hata sayılmaz (aşağıya bakın)
+    run_after_baseline_failure: true         # isteğe bağlı: baseline başarısız olsa da diğer testler çalışır (aşağıya bakın)
 ```
 - `base_url`: EPİAŞ servislerinde base path `/<ad>-service` şeklindedir (ör. `/reporting-service`). Bu olmadan
   istekler sunucunun köküne gider ve başarısız olur. `base_url` yazmazsanız araç sunucuyu Swagger'ın
@@ -276,6 +277,15 @@ kaydını kopyalayın ve `spec`, `base_url` ve `filters` değerlerini değiştir
   `data.items[0].value must be number` hatasıyla başarısız olur. `true` olduğunda, her yanıt gövdesinin
   **her** alanında `null` kabul edilir (gövdenin tamamının `null` olması da). `null` olmayan değerler yine
   tam olarak kontrol edilir (tip, enum, min/max, ...) ve zorunlu alanlar yine bulunmalıdır. Varsayılan:
+  `false`. `epiasQA` için açıktır.
+- `run_after_baseline_failure`: her operasyon önce bir geçerli istek (*baseline*) gönderir. Bu başarısız
+  olursa (ör. bir iş kuralı üretilen bir değeri reddettiği için `400`), operasyon `BASELINE_FAILED` olarak
+  görünür ve varsayılan olarak diğer tüm testleri `SKIPPED` olur. `true` olduğunda yine de çalışırlar.
+  Her birine "baseline of this operation failed ..." bilgi bulgusu eklenir, çünkü sonucu test edilen
+  değişiklikten değil aynı sorundan kaynaklanıyor olabilir (ör. "reddedilmeli" testi, baseline zaten
+  reddedildiği için `400` ile geçer). Baseline'da ağ hatası/zaman aşımı olursa operasyon yine atlanır ve
+  sağlıksız ortam nedeniyle durdurma yine geçerlidir. Mümkünse daha iyi çözüm: alana `overrides:` içinde
+  geçerli bir değer verin ("İsteğe bağlı dosyalar" bölümüne bakın), böylece baseline geçer. Varsayılan:
   `false`. `epiasQA` için açıktır.
 
 ### Adım 2: kontrol edin (test gönderilmez; yalnızca Swagger indirilir)

@@ -1,7 +1,7 @@
 // Runs a Plan against a target.
 //
 // Per operation: baseline first. Baseline not 2xx+valid -> BASELINE_FAILED and the operation's other cases
-// are SKIPPED. Auth matrix: operation needs the credential but none was given -> only AUTH-MISSING runs,
+// are SKIPPED (target option run_after_baseline_failure: they run anyway, each with an info finding). Auth matrix: operation needs the credential but none was given -> only AUTH-MISSING runs,
 // everything else SKIPPED (no credential). Monitors: environment health (abort instead of reporting
 // hundreds of defects) and credential expiry (stop auth-needing operations, allow resume with a new
 // credential). Results are checkpointed to results.jsonl after every case; teardown always runs.
@@ -137,6 +137,7 @@ export class Executor {
 
     const baseline = cases.find((c) => c.is_baseline) || null;
     let baseResult = null;
+    let baselineNote = null;
     if (baseline !== null) {
       baseResult = this.previous[baseline.id] || null;
       if (baseResult === null) {
@@ -160,7 +161,9 @@ export class Executor {
         if (baseResult.status !== SKIPPED) this.healthBaseline(baseResult);
       }
       out.push(baseResult);
-      if (!OK_BASELINE.has(baseResult.status)) {
+      if (baseResult.status === BASELINE_FAILED && this.target.run_after_baseline_failure) {
+        baselineNote = new Finding('baseline', `baseline of this operation failed (${baseResult.reason}); this result may come from the same problem, not from the tested change`, 'info');
+      } else if (!OK_BASELINE.has(baseResult.status)) {
         const transient = baseResult.status === ERROR;
         for (const c of cases) {
           if (c !== baseline) out.push(this.record(this.skip(p, c, `baseline ${baseResult.status}: ${baseResult.reason}`, !transient)));
@@ -188,6 +191,7 @@ export class Executor {
         continue;
       }
       const r = await this.execute(p, c);
+      if (baselineNote) r.findings.push(baselineNote);
       this.monitor(p, c, r);
       out.push(this.record(r));
     }

@@ -71,6 +71,9 @@ targets:
     # EPİAŞ services return null for a field when there is no data. true = a null value in a response
     # never fails the schema check ("must be number" etc.); non-null values are still fully checked.
     allow_null_in_responses: true
+    # Workflows have business rules the Swagger can't describe, so a baseline may be rejected (400).
+    # true = the operation's other tests still run (each noted "baseline of this operation failed").
+    run_after_baseline_failure: true
     # Which operations to test. Used whenever the command line has no --tag/--path/--method/--operation
     # flag (any such flag replaces this whole block for that run). Empty lists = every operation.
     # Within one list any value may match (OR); different lists must all match (AND).
